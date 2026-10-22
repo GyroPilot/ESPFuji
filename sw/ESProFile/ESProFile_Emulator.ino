@@ -91,6 +91,9 @@ void emulatorSetup(){
   updateSpareTable(); // If all this succeeds, update the spare table to reflect the attributes of the current disk image
   setLEDColor(0, 1); // Make the LED green to show that the ESProFile is ready
   Serial.println("ESProFile is ready!"); // And print a ready message
+#ifdef FUJINET_MAILBOX
+  mbSetup(); // FujiNet mailbox experiment: the network task on the other core, before interrupts go off here
+#endif
   noInterrupts(); // We need speed here and can't let FreeRTOS preempt us (can be up to 2ms of delay), so disable interrupts
 }
 
@@ -578,6 +581,9 @@ void readDrive(){
     blockNum *= 532;
     disk.seekSet(blockNum); // Seek to our block
     disk.read(blockData+readStatusOffset, 532); // And read the block into the block data buffer
+#ifdef FUJINET_MAILBOX
+    mbOnRead(blockData+readStatusOffset); // FujiNet mailbox experiment: a waiting reply goes instead of the stored page
+#endif
     Serial.println();
   }
   // Otherwise, if the block is outside the range of the disk image, fill the block data buffer with zeros
@@ -930,6 +936,9 @@ void writeDrive(){
   }
   // If we end up here, then the command is just a good old-fashioned write
   else if(blockNum < disk.fileSize()){ // So check that the block number is within the range of the disk image
+#ifdef FUJINET_MAILBOX
+    mbOnWrite(blockNum, blockData); // FujiNet mailbox experiment: a signed page is a request; the block is stored all the same
+#endif
     blockNum *= 532;
     disk.seekSet(blockNum); // Seek to the block in the disk image
     disk.write(blockData, 532); // Write the block data into the disk image

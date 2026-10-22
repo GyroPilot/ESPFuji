@@ -1,3 +1,7 @@
+// FUJINET MAILBOX EXPERIMENT (Oct 2026, Tim O'Connor with Claude; not published): comment the next line out
+// to build the plain ESProFile.  See ESProFile_FujiNet.ino and mailbox_core.h.
+#define FUJINET_MAILBOX
+
 //*************************************************************************************************************
 //* ESProFile - A powerful ESP32-based emulator and diagnostic tool for the ProFile family of hard drives.    *
 //* By: Alex Anderson-McLeod                                                                                  *
