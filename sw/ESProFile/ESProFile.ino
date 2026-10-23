@@ -1,6 +1,15 @@
 // FUJINET MAILBOX EXPERIMENT (Oct 2026, Tim O'Connor with Claude; not published): comment the next line out
 // to build the plain ESProFile.  See ESProFile_FujiNet.ino and mailbox_core.h.
 #define FUJINET_MAILBOX
+// ESPFuji BENCH build: no ProFile emulation; the mailbox requests come from the USB serial port instead, so the
+// network side is tested on a PC first.  Define it (or build with -DESPFUJI_BENCH) for the bench, never for a Lisa.
+//#define ESPFUJI_BENCH
+#ifdef FUJINET_MAILBOX
+// The network headers are read here, first of all, so that none of the emulator's #defines leak into them.
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
+#endif
 
 //*************************************************************************************************************
 //* ESProFile - A powerful ESP32-based emulator and diagnostic tool for the ProFile family of hard drives.    *
@@ -35,6 +44,11 @@ void setup(){
   #if defined(CONFIG_IDF_TARGET_ESP32S3)
       Serial.setTxTimeoutMs(0);
   #endif
+#if defined(FUJINET_MAILBOX) && defined(ESPFUJI_BENCH)
+  Serial.println("ESPFuji BENCH build: no ProFile emulation, requests from this serial port");
+  delay(2000);
+  mbBench(); // never returns
+#endif
   clearScreen(); // Clear the screen
   setLEDColor(1, 0); // Make the LED red to show that ESProFile is initializing
   if(switchState == 1){ // If the switch is in the diagnostic position, boot into diagnostic mode

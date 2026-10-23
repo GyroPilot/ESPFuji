@@ -1,0 +1,5 @@
+# espfuji.ini -- copy to the root of the ESProFile's SD card as espfuji.ini and fill in your network.
+# The drive reads it once at power-up.  The password is never stored in the ESP32's flash.
+ssid=YourNetworkName
+password=YourPassword
+hostname=espfuji
