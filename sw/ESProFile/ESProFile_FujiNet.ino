@@ -77,8 +77,14 @@ static MbConfig  mbCfg;
 static volatile uint16_t mbFileId = 0;                 // 0: no mailbox seen yet since power-up
 static uint32_t mbRequests = 0, mbReplies = 0, mbServed = 0;
 static uint8_t  mbReplyData[MB_DATA];                  // the reply page's data, built once per reply
-static uint8_t  mbBody[MB_BODY_MAX];                   // the body of the page last OPENed
+static uint8_t *mbBody = NULL;                         // the body of the page last OPENed (heap: the plain ESP32's DRAM is small)
 static uint32_t mbBodyLen = 0;
+static volatile int mbWifiReason = 0;                  // the last Wi-Fi disconnect reason (esp_wifi: 15 = wrong password, 201 = no such network)
+
+static void mbWifiEvent(WiFiEvent_t ev, WiFiEventInfo_t info) {
+    if (ev == ARDUINO_EVENT_WIFI_STA_DISCONNECTED) mbWifiReason = info.wifi_sta_disconnected.reason;
+    else if (ev == ARDUINO_EVENT_WIFI_STA_GOT_IP) mbWifiReason = 0;
+}
 static bool     mbBodyOpen = false, mbTruncated = false;
 static int      mbHttpCode = 0;
 
@@ -123,7 +129,10 @@ bool mbOnRead(uint8_t *blk) {
 static void mbReadConfig() {
     memset(&mbCfg, 0, sizeof mbCfg);
     File32 f;
-    if (!f.open("/espfuji.ini", O_RDONLY)) return;
+    if (!f.open("/espfuji.ini", O_RDONLY) && !f.open("espfuji.ini", O_RDONLY)) {
+        Serial.println("ESPFuji: espfuji.ini did not open (no card, no file, or the volume is not mounted)");
+        return;
+    }
     char line[160];
     while (f.fgets(line, sizeof line) > 0) {
         char *p = line;
@@ -141,6 +150,8 @@ static void mbReadConfig() {
     }
     f.close();
     mbCfg.have = mbCfg.ssid[0] != 0;
+    Serial.printf("ESPFuji: espfuji.ini read: ssid %s, password %s, hostname %s\n",
+                  mbCfg.ssid[0] ? "yes" : "MISSING", mbCfg.pass[0] ? "yes" : "MISSING", mbCfg.host[0] ? mbCfg.host : "(none)");
 }
 
 static const char *mbWifiWord() {
@@ -166,6 +177,10 @@ static void mbFetch(const char *url, char *out, size_t outsz) {
         snprintf(out, outsz, "ERROR no wifi (%s)", mbWifiWord());
         return;
     }
+    if (mbBody == NULL) {
+        snprintf(out, outsz, "ERROR no page buffer");
+        return;
+    }
     HTTPClient http;
     WiFiClientSecure sec;
     WiFiClient plain;
@@ -174,12 +189,26 @@ static void mbFetch(const char *url, char *out, size_t outsz) {
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
     http.setTimeout(15000);
     http.setUserAgent(ESPFUJI_VERSION " (Apple Lisa)");
+    const char *hdrs[] = { "Location" };
+    http.collectHeaders(hdrs, 1);
     bool began = https ? http.begin(sec, url) : http.begin(plain, url);
     if (!began) {
         snprintf(out, outsz, "ERROR bad address");
         return;
     }
     int code = http.GET();
+    if (!https && (code == 301 || code == 302 || code == 307 || code == 308) && http.hasHeader("Location")) {
+        String where = http.header("Location");       // a plain client cannot follow a redirect to https: redo it secure
+        if (where.startsWith("https://")) {
+            http.end();
+            sec.setInsecure();
+            if (!http.begin(sec, where)) {
+                snprintf(out, outsz, "ERROR bad redirect");
+                return;
+            }
+            code = http.GET();
+        }
+    }
     mbHttpCode = code;
     if (code <= 0) {
         snprintf(out, outsz, "ERROR %s", http.errorToString(code).c_str());
@@ -231,8 +260,18 @@ static void mbServe(const uint8_t *req, uint16_t len, uint8_t *out, uint16_t *ou
                  (unsigned long)mbRequests, (unsigned long)mbReplies, (unsigned long)mbServed,
                  (unsigned long)mbBodyLen, mbBodyOpen ? 1 : 0);
     } else if (strcmp(cmd, "WIFI") == 0) {
-        snprintf(txt, sizeof txt, "ssid %s status %s ip %s rssi %d", mbCfg.have ? mbCfg.ssid : "(none)",
-                 mbWifiWord(), WiFi.localIP().toString().c_str(), (int)WiFi.RSSI());
+        snprintf(txt, sizeof txt, "ssid %s status %s ip %s rssi %d reason %d", mbCfg.have ? mbCfg.ssid : "(none)",
+                 mbWifiWord(), WiFi.localIP().toString().c_str(), (int)WiFi.RSSI(), mbWifiReason);
+    } else if (strcmp(cmd, "SCAN") == 0) {
+        WiFi.disconnect();                             // a scan fails while a join is in progress
+        delay(300);
+        int n = WiFi.scanNetworks();                   // blocks a few seconds; names, channels and strengths only
+        size_t at = 0;
+        at += snprintf(txt + at, sizeof txt - at, "%d networks:", n);
+        for (int i = 0; i < n && at < sizeof txt - 40; i++)
+            at += snprintf(txt + at, sizeof txt - at, " [%s ch%d %ddBm]", WiFi.SSID(i).c_str(), WiFi.channel(i), (int)WiFi.RSSI(i));
+        WiFi.scanDelete();
+        WiFi.begin(mbCfg.ssid, mbCfg.pass);            // resume the join
     } else if (strncmp(cmd, "OPEN ", 5) == 0) {
         mbFetch(cmd + 5, txt, sizeof txt);
     } else if (strncmp(cmd, "READ ", 5) == 0) {
@@ -259,6 +298,25 @@ static void mbServe(const uint8_t *req, uint16_t len, uint8_t *out, uint16_t *ou
     if (n > MB_PAYLOAD) n = MB_PAYLOAD;
     memcpy(out, txt, n);
     *outlen = (uint16_t)n;
+}
+
+// SSIDs are case-sensitive and people type them from memory: scan once (about 3 s) and, when the configured name
+// matches a network only without regard to case, use the name as the network broadcasts it.
+static void mbFixSsidCase(void) {
+    int n = WiFi.scanNetworks();
+    bool exact = false; int alt = -1;
+    for (int i = 0; i < n; i++) {
+        const char *nm = WiFi.SSID(i).c_str();
+        if (strcmp(nm, mbCfg.ssid) == 0) exact = true;
+        else if (alt < 0 && strcasecmp(nm, mbCfg.ssid) == 0) alt = i;
+    }
+    if (!exact && alt >= 0) {
+        Serial.printf("ESPFuji: espfuji.ini says %s, the network is %s: using the broadcast name\n", mbCfg.ssid, WiFi.SSID(alt).c_str());
+        strlcpy(mbCfg.ssid, WiFi.SSID(alt).c_str(), sizeof mbCfg.ssid);
+    } else if (!exact && n >= 0) {
+        Serial.printf("ESPFuji: %s not seen in a scan of %d networks (2.4 GHz only; hidden networks do not show)\n", mbCfg.ssid, n);
+    }
+    WiFi.scanDelete();
 }
 
 static void mbTask(void *arg) {
@@ -294,11 +352,14 @@ void mbSetup() {
     mbReq.pending = false;
     mbRep.ready = false;
     mbFileId = 0;
+    if (mbBody == NULL) mbBody = (uint8_t *)malloc(MB_BODY_MAX);   // once, here, before the interface core runs
     mbReadConfig();
     if (mbCfg.have) {
         WiFi.persistent(false);                        // never store the credentials: no flash writes later
+        WiFi.onEvent(mbWifiEvent);
         WiFi.mode(WIFI_STA);
         if (mbCfg.host[0]) WiFi.setHostname(mbCfg.host);
+        mbFixSsidCase();                               // "Wifi" in the file, "WiFi" on the air: take the name as broadcast
         WiFi.begin(mbCfg.ssid, mbCfg.pass);
         uint32_t t0 = millis();
         while (WiFi.status() != WL_CONNECTED && millis() - t0 < MB_JOIN_MS) delay(100);
@@ -351,7 +412,26 @@ static void benchRequest(const char *txt) {
 
 void mbBench() {
     SD_SPI.begin(SD_CLK, SD_MISO, SD_MOSI, SD_CS);
-    if (!SDCard.begin(SD_CONFIG)) Serial.println("ESPFuji bench: no SD card, so no espfuji.ini");
+    if (!SDCard.begin(SD_CONFIG)) {
+        Serial.println("ESPFuji bench: SD card did NOT mount (SDCard.begin failed), so no espfuji.ini");
+    } else {
+        Serial.printf("ESPFuji bench: SD card mounted, %lu MB, FAT%d, cluster %lu bytes; root:",
+                      (unsigned long)(SDCard.card()->sectorCount() / 2048), SDCard.fatType(),
+                      (unsigned long)SDCard.bytesPerCluster());
+        FatFile root, e;
+        char nm[64];
+        if (root.open("/")) {
+            while (e.openNext(&root, O_RDONLY)) {
+                e.getName(nm, sizeof nm);
+                Serial.printf(" %s", nm);
+                e.close();
+            }
+            root.close();
+        } else {
+            Serial.print(" (root did not open)");
+        }
+        Serial.println();
+    }
     mbSetup();
     Serial.println("ESPFuji bench: type a request and RETURN -- HELLO, WIFI, ECHO x, OPEN <url>, READ <off> <n>, CLOSE");
     char line[200];
