@@ -39,9 +39,10 @@
 #ifdef FUJINET_MAILBOX
 
 #include "mailbox_core.h"
+#include "soc/uart_struct.h"
 // WiFi.h, WiFiClientSecure.h and HTTPClient.h are included at the top of ESProFile.ino (before the emulator defines).
 
-#define ESPFUJI_VERSION "ESPFuji 0.2"
+#define ESPFUJI_VERSION "ESPFuji 0.3"
 #define MB_NET_CORE   0                                // Wi-Fi's core; the interface owns core 1 with interrupts off
 #define MB_BODY_MAX   32768                            // the largest page body kept (a Lisa picture is 13 KB)
 #define MB_JOIN_MS    8000                             // how long mbSetup waits for the first Wi-Fi join
@@ -118,8 +119,8 @@ bool mbOnRead(uint8_t *blk) {
     if (mbFileId == 0 || mb_tag_fileid(blk) != mbFileId) return false;
     mb_build_data(mbReplyData, mbRep.seq, MB_REPLY, mbRep.block, mbRep.payload, mbRep.len);
     mb_swap_data(blk, mbReplyData);                    // keeps the tag; fixes the checksum byte
-    mbRep.ready = false;                               // served once; the Lisa keeps what it read
-    mbServed++;
+    mbServed++;                                        // the reply stays on offer until the next request: a read the
+                                                       // OS makes on its own cannot swallow it (24 Oct, the 2/10)
     return true;
 }
 
@@ -252,9 +253,9 @@ static void mbServe(const uint8_t *req, uint16_t len, uint8_t *out, uint16_t *ou
     if (strncmp(cmd, "ECHO ", 5) == 0) {
         snprintf(txt, sizeof txt, "OK %s", cmd + 5);
     } else if (strcmp(cmd, "HELLO") == 0) {
-        snprintf(txt, sizeof txt, "%s up %lu s, wifi %s, ip %s, requests %lu", ESPFUJI_VERSION,
+        snprintf(txt, sizeof txt, "%s up %lu s, wifi %s, ip %s, requests %lu, heap %lu min %lu", ESPFUJI_VERSION,
                  (unsigned long)(millis() / 1000), mbWifiWord(), WiFi.localIP().toString().c_str(),
-                 (unsigned long)mbRequests);
+                 (unsigned long)mbRequests, (unsigned long)ESP.getFreeHeap(), (unsigned long)ESP.getMinFreeHeap());
     } else if (strcmp(cmd, "STATUS") == 0) {
         snprintf(txt, sizeof txt, "requests %lu replies %lu served %lu body %lu open %d",
                  (unsigned long)mbRequests, (unsigned long)mbReplies, (unsigned long)mbServed,
@@ -319,9 +320,46 @@ static void mbFixSsidCase(void) {
     WiFi.scanDelete();
 }
 
+// A request typed on the USB serial port goes through the same path as a mailbox page (any build): the
+// drive can be exercised from the banana with the real emulator running, no Lisa needed.
+static bool mbSerialWanted = false;
+static uint16_t mbSerialSeq = 9000;
+
+static void mbSerialLine(const char *txt) {
+    static uint8_t page[MB_PAGE];
+    memset(page, 0, MB_PAGE);
+    mb_put16(page + 4, 0x0101);                        // a pretend S-file ID
+    mb_put16(page + 12, 1);
+    mb_build_data(page + MB_TAG, ++mbSerialSeq, MB_REQUEST, 0, (const uint8_t *)txt, strlen(txt));
+    page[11] = 0;
+    page[11] = mb_page_xor(page);
+    uint16_t keep = mbFileId;                          // the Lisa's real mailbox file stays known
+    mbOnWrite(1234, page);
+    mbFileId = keep;
+    mbSerialWanted = true;
+}
+
+// The UART driver's receive interrupt lives on the interface core, which runs with interrupts off, so
+// Serial.available() never sees a byte there: this reads the UART0 receive FIFO directly (128 bytes).
+static void mbSerialPoll(void) {
+    static char line[200];
+    static int n = 0;
+    while (UART0.status.rxfifo_cnt) {
+        char c = (char)UART0.fifo.rw_byte;
+        if (c == '\n' || c == '\r') {
+            if (n) { line[n] = 0; mbSerialLine(line); n = 0; }
+        } else if (n < (int)sizeof line - 1) {
+            line[n++] = c;
+        }
+    }
+}
+
 static void mbTask(void *arg) {
     uint32_t lastJoin = 0;
     for (;;) {
+#ifndef ESPFUJI_BENCH
+        mbSerialPoll();
+#endif
         if (mbCfg.have && WiFi.status() != WL_CONNECTED && millis() - lastJoin > 15000) {
             WiFi.reconnect();                          // no flash write in a reconnect
             lastJoin = millis();
@@ -342,6 +380,16 @@ static void mbTask(void *arg) {
             memcpy(mbRep.payload, out, outlen);
             mbRep.ready = true;
             mbReplies++;
+            if (mbSerialWanted) {                      // typed on the USB port: print it there, not to the Lisa
+                mbSerialWanted = false;
+                mbRep.ready = false;
+                Serial.printf("reply seq %u, %u bytes: ", seq, outlen);
+                for (int i = 0; i < outlen; i++) {
+                    char c = (char)out[i];
+                    Serial.print((c >= 32 && c < 127) || c == '\n' ? c : '.');
+                }
+                Serial.println();
+            }
         }
         delay(5);
     }
