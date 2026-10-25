@@ -361,7 +361,15 @@ static void mbTask(void *arg) {
         mbSerialPoll();
 #endif
         if (mbCfg.have && WiFi.status() != WL_CONNECTED && millis() - lastJoin > 15000) {
-            WiFi.reconnect();                          // no flash write in a reconnect
+            static int tries = 0;
+            if (++tries % 4 == 0) {                    // every fourth try: the boot-time scan can miss (seen right
+                WiFi.disconnect();                     // after a flash), so look the name up again and start over
+                delay(300);
+                mbFixSsidCase();
+                WiFi.begin(mbCfg.ssid, mbCfg.pass);
+            } else {
+                WiFi.reconnect();                      // no flash write in a reconnect
+            }
             lastJoin = millis();
         }
         if (mbReq.pending) {
