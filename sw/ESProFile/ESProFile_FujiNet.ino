@@ -253,9 +253,9 @@ static void mbServe(const uint8_t *req, uint16_t len, uint8_t *out, uint16_t *ou
     if (strncmp(cmd, "ECHO ", 5) == 0) {
         snprintf(txt, sizeof txt, "OK %s", cmd + 5);
     } else if (strcmp(cmd, "HELLO") == 0) {
-        snprintf(txt, sizeof txt, "%s up %lu s, wifi %s, ip %s, requests %lu, heap %lu min %lu", ESPFUJI_VERSION,
+        snprintf(txt, sizeof txt, "%s up %lus %s %s req %lu heap %luk/%luk", ESPFUJI_VERSION,   // fits a Lisa line
                  (unsigned long)(millis() / 1000), mbWifiWord(), WiFi.localIP().toString().c_str(),
-                 (unsigned long)mbRequests, (unsigned long)ESP.getFreeHeap(), (unsigned long)ESP.getMinFreeHeap());
+                 (unsigned long)mbRequests, (unsigned long)(ESP.getFreeHeap() / 1024), (unsigned long)(ESP.getMinFreeHeap() / 1024));
     } else if (strcmp(cmd, "STATUS") == 0) {
         snprintf(txt, sizeof txt, "requests %lu replies %lu served %lu body %lu open %d",
                  (unsigned long)mbRequests, (unsigned long)mbReplies, (unsigned long)mbServed,
