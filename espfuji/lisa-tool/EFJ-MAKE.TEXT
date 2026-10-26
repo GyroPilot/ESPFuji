@@ -1,0 +1,25 @@
+$EXEC
+${ REV A  23-Oct-2026  First build.  Icon: LisaFuji's for now (EFJ/ICON.BIN). }
+${==========================================================================}
+${ EFJ-MAKE.TEXT -- build ESPFuji: compile, link, put the Obj and ICON     }
+${ files in place as tool 419324, compile the phrase file.  THEN run       }
+${ EFJ/INSTALL (R <EFJ/INSTALL).  Same two-exec recipe as TWC-MAKE.        }
+${                                                                          }
+${ EFJ/ICON.BIN must be on the disk before this runs.                      }
+${==========================================================================}
+$SUBMIT EFJ/COMP
+$SUBMIT EFJ/LINK
+${                                                                          }
+F{ilemgr}D{elete}~{T419324~}Obj
+Y{es}D{elete}~{T419324~}PHRASE
+Y{es}D{elete}~{T419324~}ICON
+Y{es}C{opy}EFJ/EFJ.OBJ
+~{T419324~}Obj
+C{opy}EFJ/ICON.BIN
+~{T419324~}ICON
+Q{uit}
+${                                                                          }
+R{un}Alert
+EFJ/ALERTS.TEXT
+~{T419324~}
+$ENDEXEC

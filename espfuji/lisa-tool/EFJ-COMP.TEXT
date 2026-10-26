@@ -1,0 +1,20 @@
+$EXEC
+${ REV A  23-Oct-2026  First build.                                          }
+${==========================================================================}
+${ EFJ-COMP.TEXT -- compile ESPFuji: GLOBALS, then MBOX, then MAIN.        }
+${==========================================================================}
+F{ilemgr}D{elete}EFJ/GLOBALS.OBJ  Y{es}
+        D{elete}EFJ/MBOX.OBJ  Y{es}
+        D{elete}EFJ/MAIN.OBJ  Y{es}
+        Q{uit}
+${                                                                          }
+P{ascal Compile}EFJ/GLOBALS.TEXT
+{no listing file - this comment-only line is the [RETURN] answer}
+EFJ/GLOBALS.OBJ
+P{ascal Compile}EFJ/MBOX.TEXT
+{no listing file}
+EFJ/MBOX.OBJ
+P{ascal Compile}EFJ/MAIN.TEXT
+{no listing file}
+EFJ/MAIN.OBJ
+$ENDEXEC

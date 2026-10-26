@@ -1,0 +1,750 @@
+program ESPFuji;
+
+{ EFJ-MAIN.TEXT -- ESPFuji  ***  0.2 REV C  ***                          }
+{ REV A  23-Oct-2026  First build: the Lisa side of the FujiNet mailbox }
+{                      on an ESProFile.  NOT yet compiled on a Lisa.     }
+{                                                                        }
+{ THIS LINE IS THE VERSION CHECK.  The authoritative constant is        }
+{ efjVersion in EFJ-GLOBALS.TEXT; keep the two in step.                  }
+{                                                                        }
+{ Tool 419324.  Skeleton: TWC-MAIN REV G (LisaTwinClock 1.2): the        }
+{ callbacks, the status pane, the event loop and Initialize.            }
+{                                                                        }
+{ WHAT IT DOES                                                           }
+{   H  Hello: one request to the drive, its answer, how many reads it   }
+{      took.  The first test of the mailbox.                             }
+{   W  WiFi: the drive's network name, state and address.               }
+{   S  Status: the drive's counters.   E  Echo: a round trip.           }
+{   G  Fetch a web file: types an address; the drive fetches it and the }
+{      first lines are shown.   R  the same address again.              }
+{   ?  Help.                                                             }
+{                                                                        }
+{ Nothing is written to the mailbox until you press one of these keys.  }
+
+uses (*$U UnitStd.obj *)   UnitStd,
+     (*$U UnitHz.obj *)    UnitHz,
+     (*$U Storage.obj *)   Storage,
+     (*$U QuickDraw.obj *) QuickDraw,
+     (*$U Fontmgr.obj *)   FontMgr,
+     (*$U SysCall.obj *)   SysCall,
+     (*$U wm.events.obj *) Events,
+     (*$U wm.folders.obj *) Folders,
+     (*$U wm.menus.obj *)  Menus,
+     (*$U AlertMgr.obj *)  AlertMgr,
+     (*$U WMLstd.obj *)    WMLstd,
+     (*$U WMlCrs.obj *)    WMLCrs,
+     (*$U FilerComm.obj *) FilerComm,
+     (*$U EFJ/GLOBALS.OBJ *) EfjGlobals,
+     (*$U EFJ/MBOX.OBJ *)    EfjMbox;
+
+var
+   termErr : integer;
+
+{------------------------------------------------------------------------}
+{ The three required callbacks.                                          }
+{------------------------------------------------------------------------}
+
+function OutOfHeapSpace (hz : THz; bytesNeeded : integer) : integer;
+begin
+   OutOfHeapSpace := 0
+end;
+
+procedure AlertFailed;
+var err : integer;
+begin
+   if initing then begin
+      TellFiler(err, initFailed, noMemory, nil);
+      Halt
+   end
+end;
+
+procedure LastWishes (environPtr : p_env_blk; excepDataPtr : p_ex_data);
+begin
+   MbClose;
+   ImDying;
+   Halt
+end;
+
+{------------------------------------------------------------------------}
+{ Menus.                                                                 }
+{------------------------------------------------------------------------}
+
+procedure PutUpMenus;
+var m : integer;
+begin
+   ClearMenuBar;
+   for m := mFile to lastBarMenu do
+      InsertMenu(myMenus[m], 0);
+   DrawMenuBar
+end;
+
+{------------------------------------------------------------------------}
+{ The status pane.                                                       }
+{------------------------------------------------------------------------}
+
+procedure Clip (var big : Str255; var out : StatStr);
+{ Copy at most 80 characters.  HARDWARE LESSON (INS REV B): COPY(big,   }
+{ 1, 80) with LENGTH(big) < 80 returned an EMPTY string on the Lisa.    }
+var n : integer;
+begin
+   n := length(big);
+   if n > 80 then n := 80;
+   if n = 0 then
+      out := ''
+   else
+      out := copy(big, 1, n)
+end;
+
+procedure DrawShow;
+{ Repaint the whole status pane. }
+var fi : FontInfo;
+    i  : integer;
+begin
+   if myWindow = nil then
+      exit(DrawShow);
+   SetPort(myWindow);
+   EraseRect(myWindow^.portRect);
+   GetFontInfo(fi);
+   for i := 1 to statCnt do begin
+      MoveTo(10, 6 + (i - 1) * lineHt + fi.ascent);
+      DrawString(statLine[i])
+   end
+end;
+
+procedure DrawOne (i : integer);
+{ Repaint pane line i only: no flash while typing. }
+var fi : FontInfo;
+    r  : Rect;
+begin
+   if myWindow = nil then
+      exit(DrawOne);
+   SetPort(myWindow);
+   r := myWindow^.portRect;
+   r.top := 6 + (i - 1) * lineHt;
+   r.bottom := r.top + lineHt;
+   EraseRect(r);
+   GetFontInfo(fi);
+   MoveTo(10, 6 + (i - 1) * lineHt + fi.ascent);
+   DrawString(statLine[i])
+end;
+
+procedure AddLine (var s : StatStr);
+{ Append a line; scroll the list up when full; repaint. }
+var i : integer;
+begin
+   if statCnt < maxLines then
+      statCnt := statCnt + 1
+   else
+      for i := 1 to maxLines - 1 do
+         statLine[i] := statLine[i + 1];
+   statLine[statCnt] := s;
+   if not quiet then DrawShow
+end;
+
+procedure SetLast (var s : StatStr);
+{ Replace the last line and repaint that line only. }
+begin
+   if statCnt = 0 then
+      AddLine(s)
+   else begin
+      statLine[statCnt] := s;
+      DrawOne(statCnt)
+   end
+end;
+
+procedure AddBig (var big : Str255);
+{ Append a long string as as many lines as it needs (76 columns fit the }
+{ window; a cut lands on a space when one is near), nothing clipped.   }
+var out  : StatStr;
+    rest : Str255;
+    n, cut, i : integer;
+begin
+   rest := big;
+   repeat
+      n := length(rest);
+      cut := n;
+      if n > 76 then begin
+         cut := 76;
+         i := 76;
+         while (i > 50) and (rest[i] <> ' ') do
+            i := i - 1;
+         if i > 50 then cut := i
+      end;
+      out := copy(rest, 1, cut);
+      AddLine(out);
+      rest := copy(rest, cut + 1, n - cut)
+   until length(rest) = 0
+end;
+
+procedure LogMode;
+{ Clear the pane for a fresh run of lines. }
+begin
+   statCnt := 0
+end;
+
+procedure Head (var ttl : StatStr);
+{ A fresh pane: the about line, the title, a blank line. }
+var row : StatStr;
+begin
+   LogMode;
+   row := concat(efjVersion, '     the mailbox on the drive this tool lives on');
+   AddLine(row);
+   AddLine(ttl);
+   row := '';
+   AddLine(row)
+end;
+
+{------------------------------------------------------------------------}
+{ The pages.                                                             }
+{------------------------------------------------------------------------}
+
+procedure HomePage;
+var row : StatStr;
+begin
+   quiet := true;
+   row := 'ESPFuji: an ESProFile that is also a FujiNet';
+   Head(row);
+   row := 'H = hello to the drive       W = its WiFi       S = its counters';
+   AddLine(row);
+   row := 'E = echo (a round trip)      G = fetch a web file through the drive';
+   AddLine(row);
+   row := 'R = fetch the same address again       ? = help';
+   AddLine(row);
+   row := '';
+   AddLine(row);
+   row := 'Nothing is written to the mailbox until you press one of these keys.';
+   AddLine(row);
+   quiet := false;
+   DrawShow
+end;
+
+procedure HelpUse;
+var row : StatStr;
+begin
+   quiet := true;
+   row := 'How it works';
+   Head(row);
+   row := 'This tool must live on an ESProFile running the ESPFuji firmware.';
+   AddLine(row);
+   row := 'It makes MAILBOX.DATA beside itself (64 pages, once) and writes each';
+   AddLine(row);
+   row := 'request into a page of it; the drive recognises the page by its';
+   AddLine(row);
+   row := 'signature and hands back a reply on the next page the Lisa reads.';
+   AddLine(row);
+   row := 'The Lisa Office System never knows: to it this is an ordinary file.';
+   AddLine(row);
+   row := '';
+   AddLine(row);
+   row := 'On an ordinary ProFile, or an ESProFile without ESPFuji, every request';
+   AddLine(row);
+   row := 'ends with "no reply" after 40 seconds.  Nothing is harmed.';
+   AddLine(row);
+   row := '';
+   AddLine(row);
+   row := 'The drive needs espfuji.ini on its SD card (network name and password).';
+   AddLine(row);
+   quiet := false;
+   DrawShow
+end;
+
+procedure SayFail (rc : integer);
+{ One line for a failed request. }
+var row  : StatStr;
+    part : Str255;
+    big  : Str255;
+begin
+   if rc = mbNoFile then begin
+      MbNum(mbEcode, part);
+      big := concat('MAILBOX.DATA could not be made or opened (ecode ', concat(part, ').'));
+      AddBig(big)
+   end
+   else if rc = mbNoRep then begin
+      row := 'No reply in 40 seconds (160 fresh pages read).';
+      AddLine(row);
+      row := '(Is this drive an ESProFile with ESPFuji? Press S for its counters.)';
+      AddLine(row)
+   end
+   else if rc = mbIoErr then begin
+      MbNum(mbEcode, part);
+      big := concat('The mailbox read or write failed (ecode ', concat(part, ').'));
+      AddBig(big)
+   end
+   else if rc = mbRefus then begin
+      big := concat('The drive says: ', mbWhy);
+      AddBig(big)
+   end
+end;
+
+procedure Simple (var req : Str255; var ttl : StatStr);
+{ One text request, its reply on the pane. }
+var rc   : integer;
+    ans  : Str255;
+    part : Str255;
+    row  : StatStr;
+    big  : Str255;
+begin
+   quiet := true;
+   Head(ttl);
+   big := concat('Request: ', req);
+   AddBig(big);
+   quiet := false;
+   DrawShow;
+   if not MbOpen(myVol) then begin
+      SayFail(mbNoFile);
+      exit(Simple)
+   end;
+   rc := MbAsk(req);
+   if rc = mbOK then begin
+      MbText(ans);
+      big := concat('Reply:   ', ans);
+      AddBig(big);
+      MbNum(mbRounds, part);
+      big := concat('(seen on read ', concat(part, ' of the pages after the request)'));
+      AddBig(big)
+   end
+   else
+      SayFail(rc)
+end;
+
+procedure DoHello;
+var req : Str255;
+    ttl : StatStr;
+begin
+   req := 'HELLO';
+   ttl := 'Hello to the drive';
+   Simple(req, ttl)
+end;
+
+procedure DoWifi;
+var req : Str255;
+    ttl : StatStr;
+begin
+   req := 'WIFI';
+   ttl := 'The drive and its WiFi';
+   Simple(req, ttl)
+end;
+
+procedure DoStatus;
+var req : Str255;
+    ttl : StatStr;
+begin
+   req := 'STATUS';
+   ttl := 'The drive''s counters';
+   Simple(req, ttl)
+end;
+
+procedure DoEcho;
+var req : Str255;
+    ttl : StatStr;
+begin
+   req := 'ECHO the quick brown Lisa';
+   ttl := 'Echo: a round trip through the mailbox';
+   Simple(req, ttl)
+end;
+
+procedure ShowFile;
+{ The fetched file as lines on the pane: up to 12 lines of 76. }
+var row   : StatStr;
+    one   : string[1];
+    i, b  : integer;
+    lines : integer;
+    big   : Str255;
+    part  : Str255;
+begin
+   quiet := true;
+   row := 'The web file, first lines';
+   Head(row);
+   MbNum(mbPgLen, part);
+   big := concat(part, ' bytes');
+   MbNum(mbHttp, part);
+   big := concat(big, concat(', HTTP ', concat(part, '   (R fetches it again)')));
+   AddBig(big);
+   row := '';
+   one := ' ';
+   lines := 0;
+   i := 0;
+   while (i < mbPgLen) and (lines < 12) do begin
+      b := mbPage[i];
+      if b < 0 then b := b + 256;
+      if (b = 10) or (length(row) >= 76) then begin
+         AddLine(row);
+         row := '';
+         lines := lines + 1;
+         if b <> 10 then begin
+            one[1] := chr(b);
+            row := one
+         end
+      end
+      else if (b >= 32) and (b <= 126) then begin
+         one[1] := chr(b);
+         row := concat(row, one)
+      end;
+      i := i + 1
+   end;
+   if (length(row) > 0) and (lines < 12) then
+      AddLine(row);
+   quiet := false;
+   DrawShow
+end;
+
+procedure DoFetch;
+{ Fetch curUrl through the drive. }
+var rc  : integer;
+    row : StatStr;
+    big : Str255;
+begin
+   quiet := true;
+   row := 'Fetching through the drive';
+   Head(row);
+   AddBig(curUrl);
+   row := 'Asking ...';
+   AddLine(row);
+   quiet := false;
+   DrawShow;
+   if not MbOpen(myVol) then begin
+      SayFail(mbNoFile);
+      exit(DoFetch)
+   end;
+   rc := MbGet(curUrl);
+   if rc = mbOK then
+      ShowFile
+   else
+      SayFail(rc)
+end;
+
+{------------------------------------------------------------------------}
+{ The typed address prompt, on the last pane line.                       }
+{------------------------------------------------------------------------}
+
+procedure DrawPrompt;
+var row : StatStr;
+begin
+   row := concat(promptLbl, concat(promptTxt, '_'));
+   SetLast(row)
+end;
+
+procedure AskUrl;
+var row : StatStr;
+begin
+   quiet := true;
+   row := 'Fetch a web file';
+   Head(row);
+   row := 'Type an address and press RETURN; RETURN alone takes the last one.';
+   AddLine(row);
+   row := 'Backspace corrects; Apple-. cancels.';
+   AddLine(row);
+   row := '';
+   AddLine(row);
+   promptLbl := 'Address: ';
+   promptTxt := '';
+   promptOn := true;
+   AddLine(row);
+   quiet := false;
+   DrawShow;
+   DrawPrompt
+end;
+
+procedure PromptKey (ch : char);
+var one : string[1];
+    n   : integer;
+begin
+   if ch = chr(13) then begin
+      promptOn := false;
+      if length(promptTxt) > 0 then
+         curUrl := promptTxt;
+      if length(curUrl) = 0 then
+         HomePage
+      else
+         DoFetch
+   end
+   else if ch = chr(8) then begin
+      n := length(promptTxt);
+      if n > 0 then
+         promptTxt := copy(promptTxt, 1, n - 1);
+      DrawPrompt
+   end
+   else if (ch >= ' ') and (ch <= '~') then begin
+      if length(promptTxt) < urlCap then begin
+         one := ' ';
+         one[1] := ch;
+         promptTxt := concat(promptTxt, one)
+      end;
+      DrawPrompt
+   end
+end;
+
+procedure CancelPrompt;
+begin
+   promptOn := false;
+   HomePage
+end;
+
+procedure PlainKey (ch : char);
+{ Keys without the Apple key, when no prompt is up. }
+begin
+   if (ch = 'H') or (ch = 'h') then
+      DoHello
+   else if (ch = 'W') or (ch = 'w') then
+      DoWifi
+   else if (ch = 'S') or (ch = 's') then
+      DoStatus
+   else if (ch = 'E') or (ch = 'e') then
+      DoEcho
+   else if (ch = 'G') or (ch = 'g') then
+      AskUrl
+   else if (ch = 'R') or (ch = 'r') then begin
+      if length(curUrl) = 0 then AskUrl else DoFetch
+   end
+   else if ch = '?' then
+      HelpUse
+end;
+
+{------------------------------------------------------------------------}
+{ Window.                                                                }
+{------------------------------------------------------------------------}
+
+procedure doUpdateEvent (normal : boolean; window : WindowPtr);
+begin
+   if normal then BeginUpdate(window);
+   DrawShow;
+   if normal then EndUpdate(window)
+end;
+
+procedure InitNewDoc (window : WindowPtr);
+begin
+   myWindow := window;
+   TakeWindow(myWindow);
+   FolderSize(myWindow, winW, winH, false);
+   SetPort(myWindow);
+   ValidRect(myWindow^.portRect);
+
+   HomePage;
+   doUpdateEvent(false, myWindow);
+
+   if activeFolder = myWindow then
+      PutUpMenus
+end;
+
+procedure DoFilerEvent;
+var wantsOpen : boolean;
+begin
+   HandleFilerOp(wantsOpen);
+   if wantsOpen then
+      InitNewDoc(theEvent.who)
+end;
+
+{------------------------------------------------------------------------}
+{ Commands and events.                                                   }
+{------------------------------------------------------------------------}
+
+procedure MenuCommand (menu, item : integer);
+var err : integer;
+begin
+   if promptOn then                     { a menu command abandons the prompt }
+      promptOn := false;
+   case menu of
+
+      mFile :
+         case item of
+            miAsideAll : DoFilingCmd(cmdClosAll);
+            miAside    : DoFilingCmd(cmdClose);
+            miPutAway  :
+               begin
+                  MbClose;
+                  TellFiler(err, docClosd, docPutBack, myWindow);
+                  myWindow := nil
+               end;
+         end;
+
+      mMail :
+         case item of
+            miHello : DoHello;
+            miWifi  : DoWifi;
+            miGet   : AskUrl;
+            miAgain : if length(curUrl) = 0 then AskUrl else DoFetch;
+         end;
+
+      mHelp :
+         case item of
+            miHelpUse : HelpUse;
+         end;
+
+      mVer :
+         case item of
+            miAbout : NoteAlert(allAlerts, alrtAbou);
+         end;
+
+   end
+end;
+
+procedure ProcessTheEvent;
+var theMenu, theItem : integer;
+begin
+   case theEvent.what of
+
+      buttonDown :
+         if theEvent.who = menuFolder then begin
+            MenuSelect(theEvent.where, theMenu, theItem);
+            if (theMenu <> 0) and (theItem <> 0) then
+               MenuCommand(theMenu, theItem);
+            HiLiteMenu(0)
+         end;
+
+      buttonUp :
+         ;
+
+      keyDown :
+         if (theEvent.who = myWindow) and (not theEvent.repeatKey) then begin
+            if theEvent.appleKey then begin
+               if (theEvent.ascii = '.') and promptOn then
+                  CancelPrompt
+               else begin
+                  MenuKey(theEvent.ascii, theMenu, theItem);
+                  if theMenu <> 0 then begin
+                     HiLiteMenu(theMenu);
+                     MenuCommand(theMenu, theItem);
+                     HiLiteMenu(0)
+                  end
+               end
+            end
+            else if promptOn then
+               PromptKey(theEvent.ascii)
+            else
+               PlainKey(theEvent.ascii)
+         end;
+
+      folderActivate :
+         begin
+            TakeControl(theEvent, false, false);
+            PutUpMenus
+         end;
+
+      folderDeactivate :
+         GiveControl(theEvent);
+
+      folderUpdate :
+         if theEvent.who = myWindow then
+            doUpdateEvent(true, theEvent.who)
+         else begin
+            BeginUpdate(theEvent.who);
+            EndUpdate(theEvent.who)
+         end;
+
+      folderMoved :
+         ;
+
+      filerEvent :
+         DoFilerEvent;
+
+      abortEvent, diedEvent, diskEvent, catalogEvent, nilEvent :
+         ;
+
+      otherwise
+
+   end
+end;
+
+{------------------------------------------------------------------------}
+{ Initialize.                                                            }
+{------------------------------------------------------------------------}
+
+procedure Initialize;
+var err      : integer;
+    schedErr : integer;
+    tmp1     : string[1];
+    pcInfo   : procinfoRec;
+    excName  : t_ex_name;
+    myPrefix : TParamAlert;
+    cutAt    : integer;
+begin
+   initing := true;
+
+   excName := 'SYS_TERMINATE';
+   Declare_Excep_Hdl(err, excName, @LastWishes);
+   if err <> 0 then begin
+      TellFiler(err, initFailed, noMemory, nil);
+      halt
+   end;
+
+   toldToDie := false;
+   myWindow  := nil;
+   statCnt   := 0;
+   quiet     := false;
+   promptOn  := false;
+   promptTxt := '';
+   promptLbl := '';
+   curUrl    := 'http://fujinet.online/8bitnews/news.php';
+   MbInit;
+
+   InitHeap(@myZone[0], @myZone[maxHeap], @OutOfHeapSpace);
+
+   Sched_Class(schedErr, false);
+   Info_Process(err, My_ID, pcInfo);
+   Sched_Class(schedErr, true);
+
+   cutAt := pos('}', pcInfo.progpathname);
+   if (cutAt = 0) or (cutAt > 40) then begin
+      TellFiler(err, initFailed, internalError, nil);
+      halt
+   end;
+   myPrefix := copy(pcInfo.progpathname, 1, cutAt);
+   { the device prefix alone: everything before the open-brace of the  }
+   { tool file set.  chr(123) is the open brace, built the SanName way. }
+   tmp1 := ' ';
+   tmp1[1] := chr(123);
+   cutAt := pos(tmp1, pcInfo.progpathname);
+   if (cutAt > 1) and (cutAt <= 33) then
+      myVol := copy(pcInfo.progpathname, 1, cutAt - 1)
+   else
+      myVol := '-#12-';                { defensive fallback: boot }
+
+   InitMP(theHeap, myPrefix, @AlertFailed, alertVerNum,
+          @myMenus[mFile], allAlerts, err);
+   if err > 0 then begin
+      TellFiler(err, initFailed, noMemory, nil);
+      halt
+   end;
+
+   InitWmlCrs(err);
+   if err <> 0 then begin
+      TellFiler(err, initFailed, noDiskSpace, nil);
+      halt
+   end;
+
+   SetPort(deskPort);
+
+   initing := false
+end;
+
+{------------------------------------------------------------------------}
+{ The main program -- two-phase loop, nothing to do when idle.           }
+{------------------------------------------------------------------------}
+
+begin { main program }
+
+   InitGraf(@thePort);
+   OpenWm;
+   Initialize;
+
+   repeat
+
+      while not (ImActive or toldToDie) do begin
+         GetEvent(theEvent);
+         ProcessTheEvent
+      end;
+
+      while ImActive and (not toldToDie) do begin
+         if EventAvail then begin
+            GetEvent(theEvent);
+            ProcessTheEvent
+         end
+         else
+            LetOthersRun
+      end;
+
+   until toldToDie;
+
+   MbClose;
+   termErr := 0
+end.

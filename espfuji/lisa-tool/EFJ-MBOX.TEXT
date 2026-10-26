@@ -1,0 +1,383 @@
+unit EfjMbox;
+
+{ EFJ-MBOX.TEXT -- the FujiNet MAILBOX, Lisa side.  REV A  23-Oct-2026.  }
+{                                                                        }
+{ The drive this tool lives on is an ESProFile running ESPFuji.  The     }
+{ firmware watches every page the Lisa writes; a page whose data starts  }
+{ with LISAFUJI is a request, and the next page of that file the Lisa    }
+{ reads comes back as the reply.  The Lisa OS never knows.               }
+{                                                                        }
+{ The mailbox is MAILBOX.DATA beside the tool, 64 pages of 512 bytes,    }
+{ made at full size once and never grown.  Only whole-page, absolute    }
+{ READ_DATA / WRITE_DATA touch it: those go straight to the drive        }
+{ (OS SOURCE-FSPRIM 1595-1604) unless the OS has the page in its cache,  }
+{ so a request is written on a page that rotates through the file and   }
+{ the reply is looked for on the pages after it, with a sequence number  }
+{ in every request so a stale page shows for what it is.                 }
+{                                                                        }
+{ A mailbox page (512 data bytes, big-endian):                           }
+{    0-7 'LISAFUJI'   8-9 version 1   10-11 sequence   12-13 kind         }
+{    (1 request, 2 reply)   14-15 payload length   16-19 reserved        }
+{    (a READ reply: the offset it answers)   20.. payload, up to 492     }
+{                                                                        }
+{ Requests are text: HELLO, WIFI, STATUS, ECHO x, OPEN <url>,            }
+{ READ <offset> <count>, CLOSE.  MbGet does a whole OPEN / READ / CLOSE  }
+{ into mbPage.                                                           }
+
+INTERFACE
+
+uses (*$U UnitStd.obj *)   UnitStd,
+     (*$U UnitHz.obj *)    UnitHz,
+     (*$U Storage.obj *)   Storage,
+     (*$U QuickDraw.obj *) QuickDraw,
+     (*$U SysCall.obj *)   SysCall;
+
+const
+   mbPages  = 256;            { pages in MAILBOX.DATA: 160 polls never wrap }
+   mbPayl   = 492;            { payload bytes in a page }
+   mbPgMax  = 8192;           { bytes of a fetched web file kept }
+   mbWaitMs = 40000;          { how long a reply may take (a fetch) }
+
+   mbOK     = 0;              { MbAsk results }
+   mbNoFile = 1;              { the mailbox could not be made or opened: mbEcode }
+   mbNoRep  = 2;              { no reply in time: not an ESPFuji, or it is busy }
+   mbIoErr  = 3;              { a read or write failed: mbEcode }
+   mbRefus  = 4;              { the drive answered ERROR ...: mbWhy }
+
+type
+   MbByte = -128..127;
+
+var
+   mbEcode  : integer;        { OS ecode of the last failed call }
+   mbWhy    : string[80];     { the drive's ERROR text, or ours }
+   mbSeq    : integer;        { sequence number of the last request }
+   mbNext   : integer;        { the next page to touch: requests AND polls advance it }
+   mbRef    : integer;        { refnum of MAILBOX.DATA }
+   mbIsOpen : boolean;
+   mbBuf    : array [0..511] of MbByte;     { one page, both ways }
+   mbOut    : array [0..mbPayl] of MbByte;  { the last reply's payload }
+   mbOutLen : integer;
+   mbPage   : array [0..mbPgMax] of MbByte; { a fetched web file }
+   mbPgLen  : longint;
+   mbHttp   : integer;        { the HTTP code of the last OPEN }
+   mbRounds : integer;        { reads it took to see the last reply (for show) }
+
+procedure MbInit;
+function  MbOpen   (var vol : E_Name) : boolean;
+procedure MbClose;
+function  MbAsk    (var req : Str255) : integer;
+procedure MbText   (var s : Str255);
+function  MbGet    (var url : Str255) : integer;
+procedure MbNum    (n : longint; var txt : Str255);
+
+
+IMPLEMENTATION
+
+{$S EfjMbox}
+
+procedure MbInit;
+begin
+   mbEcode  := 0;
+   mbWhy    := '';
+   mbSeq    := 0;
+   mbNext   := 0;
+   mbRef    := 0;
+   mbIsOpen := false;
+   mbOutLen := 0;
+   mbPgLen  := 0;
+   mbHttp   := 0;
+   mbRounds := 0
+end;
+
+procedure MbNum {n : longint; var txt : Str255};
+var one : string[1];
+    neg : boolean;
+begin
+   txt := '';
+   one := ' ';
+   neg := n < 0;
+   if neg then n := -n;
+   repeat
+      one[1] := chr(48 + n mod 10);
+      txt := concat(one, txt);
+      n := n div 10
+   until n = 0;
+   if neg then txt := concat('-', txt)
+end;
+
+procedure MbPutB (i, v : integer);
+{ Store byte value 0..255 into mbBuf[i]. }
+begin
+   if v > 127 then v := v - 256;
+   mbBuf[i] := v
+end;
+
+function MbGetB (i : integer) : integer;
+var b : integer;
+begin
+   b := mbBuf[i];
+   if b < 0 then b := b + 256;
+   MbGetB := b
+end;
+
+procedure MbNap (ms : integer);
+{ Sleep ms milliseconds (OS DELAY_TIME). }
+var iv : timestmp_interval;
+    ct : time_rec;
+    e  : integer;
+begin
+   iv.sec := ms div 1000;
+   iv.msec := ms mod 1000;
+   ct.year := 0;
+   ct.day := 1;
+   ct.hour := 0;
+   ct.minute := 0;
+   ct.second := 0;
+   ct.msec := 0;
+   DELAY_TIME(e, iv, ct)
+end;
+
+function MbOpen {var vol : E_Name} : boolean;
+{ Make MAILBOX.DATA beside the tool if it is not there (64 whole pages, }
+{ written one by one), then open it for reading and writing.           }
+var path     : Pathname;
+    ec, e2   : integer;
+    schedErr : integer;
+    i        : integer;
+    wrote    : longint;
+    where    : longint;
+    fresh    : boolean;
+begin
+   MbOpen := false;
+   if mbIsOpen then begin
+      MbOpen := true;
+      exit(MbOpen)
+   end;
+   path := concat(vol, 'MAILBOX.DATA');
+   Sched_Class(schedErr, false);
+   MAKE_FILE(ec, path, 0);
+   Sched_Class(schedErr, true);
+   fresh := ec <= 0;
+   if (ec > 0) and (ec <> 890) then begin        { 890 = already there }
+      mbEcode := ec;
+      exit(MbOpen)
+   end;
+   Sched_Class(schedErr, false);
+   OPEN(ec, path, mbRef, [DRead, DWrite]);
+   Sched_Class(schedErr, true);
+   if ec > 0 then begin
+      mbEcode := ec;
+      exit(MbOpen)
+   end;
+   if fresh then begin
+      for i := 0 to 511 do
+         mbBuf[i] := 0;
+      for i := 0 to mbPages - 1 do begin
+         where := i;
+         where := where * 512;
+         Sched_Class(schedErr, false);
+         WRITE_DATA(ec, mbRef, ord4(@mbBuf), 512, wrote, absolute, where);
+         Sched_Class(schedErr, true);
+         if (ec > 0) or (wrote <> 512) then begin
+            mbEcode := ec;
+            CLOSE_OBJECT(e2, mbRef);
+            exit(MbOpen)
+         end
+      end;
+      Sched_Class(schedErr, false);
+      FLUSH(ec, mbRef);
+      Sched_Class(schedErr, true)
+   end;
+   mbIsOpen := true;
+   MbOpen := true
+end;
+
+procedure MbClose;
+var e : integer;
+begin
+   if mbIsOpen then begin
+      CLOSE_OBJECT(e, mbRef);
+      mbIsOpen := false
+   end
+end;
+
+function MbAsk {var req : Str255} : integer;
+{ Write the request on the next page, then read the pages after it    }
+{ until the reply with this sequence number comes back.  The reply's   }
+{ payload is in mbOut; mbRounds says how many reads it took.           }
+var i, n, r, j : integer;
+    ec         : integer;
+    schedErr   : integer;
+    did        : longint;
+    waited     : longint;
+    where      : longint;
+    tmp        : Str255;
+begin
+   MbAsk := mbNoFile;
+   if not mbIsOpen then
+      exit(MbAsk);
+   mbSeq := mbSeq + 1;
+   if mbSeq > 30000 then mbSeq := 1;
+   n := length(req);
+   if n > mbPayl then n := mbPayl;
+   for i := 0 to 511 do
+      mbBuf[i] := 0;
+   mbBuf[0] := ord('L');
+   mbBuf[1] := ord('I');
+   mbBuf[2] := ord('S');
+   mbBuf[3] := ord('A');
+   mbBuf[4] := ord('F');
+   mbBuf[5] := ord('U');
+   mbBuf[6] := ord('J');
+   mbBuf[7] := ord('I');
+   MbPutB(9, 1);                        { version }
+   MbPutB(10, mbSeq div 256);
+   MbPutB(11, mbSeq mod 256);
+   MbPutB(13, 1);                       { a request }
+   MbPutB(14, n div 256);
+   MbPutB(15, n mod 256);
+   for i := 1 to n do
+      MbPutB(19 + i, ord(req[i]));
+   r := mbNext;
+   mbNext := (mbNext + 1) mod mbPages;
+   where := r;
+   where := where * 512;
+   Sched_Class(schedErr, false);
+   WRITE_DATA(ec, mbRef, ord4(@mbBuf), 512, did, absolute, where);
+   Sched_Class(schedErr, true);
+   if (ec > 0) or (did <> 512) then begin
+      mbEcode := ec;
+      MbAsk := mbIoErr;
+      exit(MbAsk)
+   end;
+   Sched_Class(schedErr, false);
+   FLUSH(ec, mbRef);                    { in case the OS held the page }
+   Sched_Class(schedErr, true);
+   waited := 0;
+   mbRounds := 0;
+   MbAsk := mbNoRep;
+   while waited < mbWaitMs do begin
+      for j := 1 to 3 do begin
+         mbRounds := mbRounds + 1;
+         where := mbNext;             { a page the OS has not cached }
+         mbNext := (mbNext + 1) mod mbPages;
+         where := where * 512;
+         Sched_Class(schedErr, false);
+         READ_DATA(ec, mbRef, ord4(@mbBuf), 512, did, absolute, where);
+         Sched_Class(schedErr, true);
+         if (ec > 0) or (did <> 512) then begin
+            mbEcode := ec;
+            MbAsk := mbIoErr;
+            exit(MbAsk)
+         end;
+         if (mbBuf[0] = ord('L')) and (mbBuf[1] = ord('I')) and (mbBuf[7] = ord('I')) then
+            if (MbGetB(13) = 2) and (MbGetB(12) = 0) then
+               if MbGetB(10) * 256 + MbGetB(11) = mbSeq then begin
+                  mbOutLen := MbGetB(14) * 256 + MbGetB(15);
+                  if mbOutLen > mbPayl then mbOutLen := mbPayl;
+                  for i := 0 to mbOutLen - 1 do
+                     mbOut[i] := mbBuf[20 + i];
+                  MbAsk := mbOK;
+                  if mbOutLen >= 6 then
+                     if (mbOut[0] = ord('E')) and (mbOut[1] = ord('R')) and (mbOut[2] = ord('R')) then begin
+                        MbText(tmp);
+                        n := length(tmp);
+                        if n > 80 then n := 80;
+                        if n = 0 then mbWhy := '' else mbWhy := copy(tmp, 1, n);
+                        MbAsk := mbRefus
+                     end;
+                  exit(MbAsk)
+               end
+      end;
+      MbNap(250);
+      waited := waited + 250
+   end
+end;
+
+procedure MbText {var s : Str255};
+{ The last reply as a string (at most 255 characters; control bytes as spaces). }
+var i, n, b : integer;
+    one     : string[1];
+begin
+   s := '';
+   one := ' ';
+   n := mbOutLen;
+   if n > 255 then n := 255;
+   for i := 0 to n - 1 do begin
+      b := mbOut[i];
+      if b < 0 then b := b + 256;
+      if (b < 32) or (b > 126) then b := 32;
+      one[1] := chr(b);
+      s := concat(s, one)
+   end
+end;
+
+function MbVal (var s : Str255; var at : integer) : longint;
+{ The number at s[at] (skipping blanks); at is left after it. }
+var v : longint;
+    c : integer;
+begin
+   v := 0;
+   while (at <= length(s)) and (s[at] = ' ') do at := at + 1;
+   while at <= length(s) do begin
+      c := ord(s[at]);
+      if (c < 48) or (c > 57) then begin
+         MbVal := v;
+         exit(MbVal)
+      end;
+      v := v * 10 + (c - 48);
+      at := at + 1
+   end;
+   MbVal := v
+end;
+
+function MbGet {var url : Str255} : integer;
+{ OPEN the address, READ its body into mbPage (up to mbPgMax bytes), CLOSE. }
+var req, ans, part : Str255;
+    rc, i, at      : integer;
+    total, off     : integer;
+    cnt            : integer;
+    tl             : longint;
+begin
+   mbPgLen := 0;
+   mbHttp := 0;
+   req := concat('OPEN ', url);
+   rc := MbAsk(req);
+   if rc <> mbOK then begin
+      MbGet := rc;
+      exit(MbGet)
+   end;
+   MbText(ans);                         { OK <bytes> <http code> }
+   at := 3;
+   tl := MbVal(ans, at);
+   if tl > mbPgMax then tl := mbPgMax;
+   total := tl;
+   tl := MbVal(ans, at);
+   mbHttp := tl;
+   off := 0;
+   while off < total do begin
+      cnt := mbPayl;
+      if total - off < cnt then cnt := total - off;
+      MbNum(off, part);
+      req := concat('READ ', concat(part, ' '));
+      MbNum(cnt, part);
+      req := concat(req, part);
+      rc := MbAsk(req);
+      if rc <> mbOK then begin
+         req := 'CLOSE';
+         i := MbAsk(req);
+         MbGet := rc;
+         exit(MbGet)
+      end;
+      for i := 0 to mbOutLen - 1 do
+         mbPage[off + i] := mbOut[i];
+      off := off + mbOutLen;
+      if mbOutLen = 0 then total := off     { the drive gave nothing more }
+   end;
+   mbPgLen := off;
+   req := 'CLOSE';
+   i := MbAsk(req);
+   MbGet := mbOK
+end;
+
+end.

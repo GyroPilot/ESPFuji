@@ -1,0 +1,72 @@
+; ==========================================================================
+;  EFJ-ALERTS.TEXT -- phrase-file source for ESPFuji (419324).
+;  Compiled by the Workshop 'Alert' tool into T419324PHRASE.
+;  Comments on their OWN lines; blank lines are STRUCTURAL; alert numbers
+;  ascend and 1 and 2 are REQUIRED; each section ends with a lone 0.
+; ==========================================================================
+;
+; REV A -- 23-Oct-2026: first build.  Three alerts, four menus.
+; Cache bytes 4000 (the TwinClock lesson: below the tool's suggestion it
+; pauses for a keypress and eats the next line of the MAKE exec).
+; Menus are matched BY POSITION against the mi* constants in EFJ-GLOBALS;
+; a '-' separator counts as a position.  Keep the two files in lockstep.
+;
+; ---- FILE HEADER ---------------------------------------------------------
+1
+4
+4000
+?
+Wait
+Stop
+Note
+Caution
+Cancel
+OK
+
+; ==== ALERTS ==============================================================
+;
+1 note alert
+ESPFuji could not find the message that belongs here.
+If you cannot proceed, mention the number ^N.
+
+2 stop alert
+ESPFuji is having trouble reaching the disk that holds the tool.^L^L
+Put your documents away one at a time, or press the on-off button to
+save them all.
+
+11 note alert
+ESPFuji 0.1   (23 October 2026)^L^L
+The Lisa side of the FujiNet mailbox: this tool talks to the ESProFile
+it lives on, an ESProFile running the ESPFuji firmware, through a file
+called MAILBOX.DATA beside the tool.  No serial port, no adapter.^L^L
+H says hello to the drive, W asks about its WiFi, G fetches a web file
+through it and shows the first lines.^L
+Tool 419324.  T. O'Connor (bmwcyclist), 2026.  An experiment.
+
+0
+
+; ==== MENUS ===============================================================
+;
+1
+File/Print
+Set Aside Everything
+Set Aside ESPFuji
+-
+Save & Put Away
+
+2
+Mailbox
+Hello/H
+WiFi/W
+Fetch a Web File .../G
+Fetch Again/R
+
+3
+Help
+How to Use/?
+
+4
+Version
+About ESPFuji
+
+0

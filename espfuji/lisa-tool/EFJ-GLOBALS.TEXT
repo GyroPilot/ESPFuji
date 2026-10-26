@@ -1,0 +1,134 @@
+unit EfjGlobals;
+
+{ REV A  23-Oct-2026  First increment of ESPFuji (tool 419324): the     }
+{                      Lisa side of the FujiNet MAILBOX on an ESProFile. }
+{                      State and the Filer handshake, cloned from       }
+{                      TWC-GLOBALS REV G (LisaTwinClock 1.2).            }
+
+{ EFJ-GLOBALS.TEXT -- ESPFuji.                                           }
+{ The drive this tool lives on is an ESProFile with the ESPFuji          }
+{ firmware: it answers requests written into MAILBOX.DATA beside the    }
+{ tool.  The mailbox itself is unit EfjMbox (EFJ-MBOX).  This unit is   }
+{ state only.                                                            }
+
+INTERFACE
+
+uses (*$U UnitStd.obj *)   UnitStd,
+     (*$U UnitHz.obj *)    UnitHz,
+     (*$U Storage.obj *)   Storage,
+     (*$U QuickDraw.obj *) QuickDraw,
+     (*$U Fontmgr.obj *)   FontMgr,
+     (*$U SysCall.obj *)   SysCall,
+     (*$U wm.events.obj *) Events,
+     (*$U wm.folders.obj *) Folders,
+     (*$U wm.menus.obj *)  Menus,
+     (*$U AlertMgr.obj *)  AlertMgr,
+     (*$U WMLstd.obj *)    WMLstd,
+     (*$U WMlCrs.obj *)    WMLCrs,
+     (*$U FilerComm.obj *) FilerComm;
+
+const
+   efjVersion = 'ESPFuji 0.2';
+
+   winW = 600;                { the status window }
+   winH = 300;
+   maxLines = 18;             { status lines kept and drawn }
+   lineHt   = 16;
+   urlCap   = 70;             { characters of a typed address }
+
+   { Menus.  A '-' separator COUNTS as an item position.                 }
+   mFile = 1;                 { "File/Print" }
+      miAsideAll = 1;
+      miAside    = 2;
+      { 3 is a separator }
+      miPutAway  = 4;
+
+   mMail = 2;                 { "Mailbox" }
+      miHello = 1;            { Hello/H }
+      miWifi  = 2;            { WiFi/W }
+      miGet   = 3;            { Fetch a Web File .../G }
+      miAgain = 4;            { Fetch Again/R }
+
+   mHelp = 3;                 { "Help" }
+      miHelpUse = 1;          { How to Use/? }
+
+   mVer = 4;                  { "Version" }
+      miAbout = 1;
+
+   lastBarMenu = 4;
+   lastMenu    = 4;
+
+   alertVerNum = 1;
+   alrtAbou   = 11;           { the About box }
+
+   { Heap: only the alert cache lives here.  4,000 integers = 8,000 bytes. }
+   maxHeap = 4000;
+
+type
+   StatStr = string[80];
+
+var
+   theEvent  : EventRecord;
+   myWindow  : WindowPtr;
+   toldToDie : boolean;
+   initing   : boolean;
+   myMenus   : array [1..lastMenu] of MenuInfo;
+   allAlerts : TAlertFile;
+   myZone    : array [0..maxHeap] of integer;
+
+   { the status pane: a short list of lines }
+   statLine  : array [1..maxLines] of StatStr;
+   statCnt   : integer;
+   quiet     : boolean;       { TRUE while a page is being built; AddLine }
+                              { then skips the repaint }
+
+   myVol     : E_Name;        { the device this tool lives on, e.g. -#12- }
+
+   { the typed prompt on the last status line }
+   promptOn  : boolean;
+   promptTxt : StatStr;       { what has been typed so far }
+   promptLbl : StatStr;       { the label drawn before it }
+
+   curUrl    : Str255;        { the last address fetched (R fetches it again) }
+
+procedure HandleFilerOp (var wantsOpen : boolean);
+
+
+IMPLEMENTATION
+
+procedure HandleFilerOp {var wantsOpen : boolean};
+var fx  : FilerExt;
+    err : integer;
+begin
+   wantsOpen := false;
+   GetAddParms(err, theEvent, fx);
+
+   case fx.theFlrOp of
+
+      fcNone :
+         wantsOpen := true;              { the user opened the tool }
+
+      fcResume :
+         TellFiler(err, docClosd, internalError, theEvent.who);
+
+      fcClose, fcSuspend, fcShred :
+         begin
+            myWindow := nil;
+            TellFiler(err, docClosd, allOK, theEvent.who)
+         end;
+
+      fcCopy, fcPut :
+         TellFiler(err, docNotXfered, internalError, theEvent.who);
+
+      fcDfClose :
+         TellFiler(err, dfClosed, allOK, theEvent.who);
+
+      fcTerminate :
+         toldToDie := true;
+
+      otherwise
+
+   end
+end;
+
+end.
