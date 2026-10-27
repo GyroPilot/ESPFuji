@@ -43,7 +43,7 @@
 #include "hal/uart_ll.h"
 // WiFi.h, WiFiClientSecure.h and HTTPClient.h are included at the top of ESProFile.ino (before the emulator defines).
 
-#define ESPFUJI_VERSION "ESPFuji 0.4"
+#define ESPFUJI_VERSION "ESPFuji 0.5"
 #define MB_NET_CORE   0                                // Wi-Fi's core; the interface owns core 1 with interrupts off
 #define MB_BODY_MAX   32768                            // the largest page body kept (a Lisa picture is 13 KB)
 #define MB_JOIN_MS    8000                             // how long mbSetup waits for the first Wi-Fi join
@@ -99,6 +99,7 @@ static uint32_t trLastMs = 0, trLastGet = 0, trWorstMs = 0, trFetches = 0, trSlo
 static uint32_t trServeWorst = 0;                     // the longest any request took to answer (ms)
 static uint32_t trStackMin = 0xFFFFFFFF;              // the least stack the net task has had left (bytes)
 static char     trWorstStage[8] = "-";
+static bool     mbSntpOn = false;                     // 0.5: SNTP started once Wi-Fi is up; CLOCK answers UTC
 
 static void trNote(const char *stage, uint32_t tStart, uint32_t tGet) {
     uint32_t ms = millis() - tStart;
@@ -292,6 +293,14 @@ static void mbServe(const uint8_t *req, uint16_t len, uint8_t *out, uint16_t *ou
         snprintf(txt, sizeof txt, "requests %lu replies %lu served %lu body %lu open %d",
                  (unsigned long)mbRequests, (unsigned long)mbReplies, (unsigned long)mbServed,
                  (unsigned long)mbBodyLen, mbBodyOpen ? 1 : 0);
+    } else if (strcmp(cmd, "CLOCK") == 0) {            // 0.5: "OK yyyy mm dd hh mi ss" (UTC, from SNTP)
+        time_t now = time(NULL);
+        struct tm t;
+        if (now < 1700000000 || !gmtime_r(&now, &t))
+            snprintf(txt, sizeof txt, "ERROR no time yet (%s)", mbSntpOn ? "SNTP waiting" : "no wifi");
+        else
+            snprintf(txt, sizeof txt, "OK %04d %02d %02d %02d %02d %02d", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
+                     t.tm_hour, t.tm_min, t.tm_sec);
     } else if (strcmp(cmd, "TRACE") == 0) {            // 0.4: timing of the fetches since power-up
         snprintf(txt, sizeof txt, "fetch last %lums (get %lu) worst %lums at %s; %lu fetches, %lu over 20s, %lu cut; "
                  "slowest reply %lums; req %lu rep %lu; stack left %lu of %u",
@@ -424,6 +433,10 @@ static void mbTask(void *arg) {
                 WiFi.reconnect();                      // no flash write in a reconnect
             }
             lastJoin = millis();
+        }
+        if (!mbSntpOn && WiFi.status() == WL_CONNECTED) {   // 0.5: the clock, once the network is there
+            configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+            mbSntpOn = true;
         }
         if (mbReq.pending) {
             uint16_t seq = mbReq.seq, len = mbReq.len;
