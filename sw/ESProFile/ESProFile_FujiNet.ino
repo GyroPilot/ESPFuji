@@ -204,11 +204,18 @@ static void mbFetch(const char *url, char *out, size_t outsz) {
         snprintf(out, outsz, "ERROR no page buffer");
         return;
     }
-    HTTPClient http;
-    WiFiClientSecure sec;
-    WiFiClient plain;
+    // 0.5: the client objects persist (static): the crash decoded 27 Oct was lwIP freeing an already-freed TCP
+    // segment in its own thread right after a slow fetch closed, i.e. a close/destructor race; one set of
+    // objects, no connection reuse, and an explicit stop before the next fetch takes the destructors out of it.
+    static HTTPClient http;
+    static WiFiClientSecure sec;
+    static WiFiClient plain;
+    http.end();
+    sec.stop();
+    plain.stop();
     bool https = strncasecmp(url, "https://", 8) == 0;
     if (https) sec.setInsecure();                      // no certificate store on the drive: the FujiNet does the same by default
+    http.setReuse(false);                              // 0.5: Connection: close; never keep a socket between fetches
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
     http.setRedirectLimit(2);                          // 0.4: each redirect is a new connection
     http.setConnectTimeout(5000);                      // 0.4: bound every stage (the library defaults add up past 40 s,
@@ -462,7 +469,7 @@ static void mbTask(void *arg) {
             if (mbSerialWanted) {                      // typed on the USB port: print it there, not to the Lisa
                 mbSerialWanted = false;
                 mbRep.ready = false;
-                static char line[MB_PAYLOAD + 48];
+                char line[MB_PAYLOAD + 48];             // 0.5: on the task's stack (static DRAM is full)
                 int n = snprintf(line, sizeof line, "reply seq %u, %u bytes: ", seq, outlen);
                 for (int i = 0; i < outlen && n < (int)sizeof line - 3; i++) {
                     char c = (char)out[i];
