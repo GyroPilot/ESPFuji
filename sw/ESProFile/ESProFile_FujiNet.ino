@@ -40,12 +40,17 @@
 
 #include "mailbox_core.h"
 #include "soc/uart_struct.h"
+#include "hal/uart_ll.h"
 // WiFi.h, WiFiClientSecure.h and HTTPClient.h are included at the top of ESProFile.ino (before the emulator defines).
 
-#define ESPFUJI_VERSION "ESPFuji 0.3"
+#define ESPFUJI_VERSION "ESPFuji 0.4"
 #define MB_NET_CORE   0                                // Wi-Fi's core; the interface owns core 1 with interrupts off
 #define MB_BODY_MAX   32768                            // the largest page body kept (a Lisa picture is 13 KB)
 #define MB_JOIN_MS    8000                             // how long mbSetup waits for the first Wi-Fi join
+#ifndef MB_STACK
+#define MB_STACK      12288                            // the net task's stack in bytes (0.3: 12288)
+#endif
+#define MB_FETCH_MS   30000                            // 0.4: an OPEN ends within this, so its reply beats the Lisa's 40 s wait
 
 struct MbRequest {
     volatile bool pending;                             // set by the interface core, cleared by the net task
@@ -88,6 +93,20 @@ static void mbWifiEvent(WiFiEvent_t ev, WiFiEventInfo_t info) {
 }
 static bool     mbBodyOpen = false, mbTruncated = false;
 static int      mbHttpCode = 0;
+
+// 0.4: where the time goes.  TRACE reports the last fetch, the slowest, and how many ran long or were cut short.
+static uint32_t trLastMs = 0, trLastGet = 0, trWorstMs = 0, trFetches = 0, trSlow = 0, trCut = 0;
+static uint32_t trServeWorst = 0;                     // the longest any request took to answer (ms)
+static uint32_t trStackMin = 0xFFFFFFFF;              // the least stack the net task has had left (bytes)
+static char     trWorstStage[8] = "-";
+
+static void trNote(const char *stage, uint32_t tStart, uint32_t tGet) {
+    uint32_t ms = millis() - tStart;
+    trLastMs = ms;
+    trLastGet = tGet;
+    if (ms > 20000) trSlow++;
+    if (ms > trWorstMs) { trWorstMs = ms; strlcpy(trWorstStage, stage, sizeof trWorstStage); }
+}
 
 // ---- the interface core (called with interrupts off; must not block, must be quick) -------------
 
@@ -170,6 +189,8 @@ static const char *mbWifiWord() {
 
 // OPEN: fetch the whole body now; the Lisa reads it in pages with READ.
 static void mbFetch(const char *url, char *out, size_t outsz) {
+    uint32_t tStart = millis(), tGet = 0;
+    trFetches++;
     mbBodyLen = 0;
     mbTruncated = false;
     mbBodyOpen = false;
@@ -188,7 +209,10 @@ static void mbFetch(const char *url, char *out, size_t outsz) {
     bool https = strncasecmp(url, "https://", 8) == 0;
     if (https) sec.setInsecure();                      // no certificate store on the drive: the FujiNet does the same by default
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-    http.setTimeout(15000);
+    http.setRedirectLimit(2);                          // 0.4: each redirect is a new connection
+    http.setConnectTimeout(5000);                      // 0.4: bound every stage (the library defaults add up past 40 s,
+    http.setTimeout(8000);                             //      and a TLS handshake may otherwise wait 120 s): one
+    if (https) sec.setHandshakeTimeout(8);             //      connection takes at most 5 + 8 + 8 s
     http.setUserAgent(ESPFUJI_VERSION " (Apple Lisa)");
     const char *hdrs[] = { "Location" };
     http.collectHeaders(hdrs, 1);
@@ -198,11 +222,13 @@ static void mbFetch(const char *url, char *out, size_t outsz) {
         return;
     }
     int code = http.GET();
-    if (!https && (code == 301 || code == 302 || code == 307 || code == 308) && http.hasHeader("Location")) {
+    if (!https && (code == 301 || code == 302 || code == 307 || code == 308) && http.hasHeader("Location")
+        && millis() - tStart < 10000) {                // 0.4: a second connection only while there is time for it
         String where = http.header("Location");       // a plain client cannot follow a redirect to https: redo it secure
         if (where.startsWith("https://")) {
             http.end();
             sec.setInsecure();
+            sec.setHandshakeTimeout(8);
             if (!http.begin(sec, where)) {
                 snprintf(out, outsz, "ERROR bad redirect");
                 return;
@@ -210,17 +236,21 @@ static void mbFetch(const char *url, char *out, size_t outsz) {
             code = http.GET();
         }
     }
+    tGet = millis() - tStart;
     mbHttpCode = code;
     if (code <= 0) {
         snprintf(out, outsz, "ERROR %s", http.errorToString(code).c_str());
         http.end();
+        trNote("get", tStart, tGet);
         return;
     }
     WiFiClient *s = http.getStreamPtr();
     int total = http.getSize();                        // -1 when the length is not known
     uint32_t t0 = millis();
     uint8_t junk[256];
-    while (s && (http.connected() || s->available()) && millis() - t0 < 20000) {
+    bool late = false;
+    while (s && (http.connected() || s->available()) && millis() - t0 < 8000) {
+        if (millis() - tStart >= MB_FETCH_MS) { late = true; break; }   // 0.4: answer the Lisa with what came
         if (total >= 0 && mbBodyLen >= (uint32_t)total) break;
         size_t avail = s->available();
         if (avail == 0) {
@@ -238,6 +268,8 @@ static void mbFetch(const char *url, char *out, size_t outsz) {
         t0 = millis();
     }
     http.end();
+    if (late) { mbTruncated = true; trCut++; }
+    trNote(late ? "cut" : "body", tStart, tGet);
     mbBodyOpen = true;
     snprintf(out, outsz, "OK %lu %d%s", (unsigned long)mbBodyLen, code, mbTruncated ? " truncated" : "");
 }
@@ -260,6 +292,13 @@ static void mbServe(const uint8_t *req, uint16_t len, uint8_t *out, uint16_t *ou
         snprintf(txt, sizeof txt, "requests %lu replies %lu served %lu body %lu open %d",
                  (unsigned long)mbRequests, (unsigned long)mbReplies, (unsigned long)mbServed,
                  (unsigned long)mbBodyLen, mbBodyOpen ? 1 : 0);
+    } else if (strcmp(cmd, "TRACE") == 0) {            // 0.4: timing of the fetches since power-up
+        snprintf(txt, sizeof txt, "fetch last %lums (get %lu) worst %lums at %s; %lu fetches, %lu over 20s, %lu cut; "
+                 "slowest reply %lums; req %lu rep %lu; stack left %lu of %u",
+                 (unsigned long)trLastMs, (unsigned long)trLastGet, (unsigned long)trWorstMs, trWorstStage,
+                 (unsigned long)trFetches, (unsigned long)trSlow, (unsigned long)trCut, (unsigned long)trServeWorst,
+                 (unsigned long)mbRequests, (unsigned long)mbReplies,
+                 (unsigned long)trStackMin, (unsigned)MB_STACK);
     } else if (strcmp(cmd, "WIFI") == 0) {
         snprintf(txt, sizeof txt, "ssid %s status %s ip %s rssi %d reason %d", mbCfg.have ? mbCfg.ssid : "(none)",
                  mbWifiWord(), WiFi.localIP().toString().c_str(), (int)WiFi.RSSI(), mbWifiReason);
@@ -323,6 +362,20 @@ static void mbFixSsidCase(void) {
 // A request typed on the USB serial port goes through the same path as a mailbox page (any build): the
 // drive can be exercised from the banana with the real emulator running, no Lisa needed.
 static bool mbSerialWanted = false;
+
+// 0.4: replies go out the way requests come in, straight through the UART0 transmit FIFO.  Serial.print from this
+// core waits for the driver's "FIFO empty" interrupt once the 128-byte FIFO fills, and that interrupt lives on the
+// interface core with interrupts off: a reply longer than the FIFO froze the net task for good (26 Oct, TRACE).
+static void mbSerialOut(const char *p, size_t n) {
+    while (n) {
+        uint32_t room = uart_ll_get_txfifo_len(&UART0);   // free bytes of the 128; keep well clear of full,
+        if (room < 96) { delay(1); continue; }            // a slightly stale count must never overflow it
+        uint32_t k = n < 64 ? n : 64;
+        uart_ll_write_txfifo(&UART0, (const uint8_t *)p, k);
+        p += k;
+        n -= k;
+    }
+}
 static uint16_t mbSerialSeq = 9000;
 
 static void mbSerialLine(const char *txt) {
@@ -381,7 +434,12 @@ static void mbTask(void *arg) {
             uint8_t out[MB_PAYLOAD];
             uint16_t outlen = 0;
             uint32_t echo = 0;
+            uint32_t tServe = millis();
             mbServe(payload, len, out, &outlen, &echo);
+            tServe = millis() - tServe;
+            if (tServe > trServeWorst) trServeWorst = tServe;
+            uint32_t hwm = uxTaskGetStackHighWaterMark(NULL);
+            if (hwm < trStackMin) trStackMin = hwm;
             mbRep.block = echo ? echo : block;
             mbRep.seq = seq;
             mbRep.len = outlen;
@@ -391,12 +449,15 @@ static void mbTask(void *arg) {
             if (mbSerialWanted) {                      // typed on the USB port: print it there, not to the Lisa
                 mbSerialWanted = false;
                 mbRep.ready = false;
-                Serial.printf("reply seq %u, %u bytes: ", seq, outlen);
-                for (int i = 0; i < outlen; i++) {
+                static char line[MB_PAYLOAD + 48];
+                int n = snprintf(line, sizeof line, "reply seq %u, %u bytes: ", seq, outlen);
+                for (int i = 0; i < outlen && n < (int)sizeof line - 3; i++) {
                     char c = (char)out[i];
-                    Serial.print((c >= 32 && c < 127) || c == '\n' ? c : '.');
+                    line[n++] = (c >= 32 && c < 127) || c == '\n' ? c : '.';
                 }
-                Serial.println();
+                line[n++] = '\r';
+                line[n++] = '\n';
+                mbSerialOut(line, n);              // 0.4: never Serial.print from this core (see mbSerialOut)
             }
         }
         delay(5);
@@ -426,7 +487,7 @@ void mbSetup() {
     } else {
         Serial.println("ESPFuji: no espfuji.ini on the SD card: mailbox without network");
     }
-    xTaskCreatePinnedToCore(mbTask, "espfuji", 12288, NULL, 1, NULL, MB_NET_CORE);
+    xTaskCreatePinnedToCore(mbTask, "espfuji", MB_STACK, NULL, 1, NULL, MB_NET_CORE);
     Serial.println("ESPFuji mailbox: on (experiment)");
 }
 
