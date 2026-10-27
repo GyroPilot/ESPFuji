@@ -1,6 +1,6 @@
 // mailbox_core.h -- the FujiNet MAILBOX for an ESProFile: the pure parts, no hardware.
-// EXPERIMENT, October 2026, Tim O'Connor (bmwcyclist) with Claude.  NOT published; nothing here
-// goes anywhere until Alex Anderson has seen it.  GPL-3.0, to match the FujiNet firmware.
+// EXPERIMENT, October 2026, Tim O'Connor (bmwcyclist) with Claude.  Public since 27 Oct 2026 with
+// Alex Anderson-McLeod's agreement (github.com/GyroPilot/ESPFuji).  GPL-3.0, to match the FujiNet firmware.
 //
 // THE IDEA.  A Lisa Office System program cannot talk to a drive except through files.  So the
 // program creates an ordinary file, MAILBOX.DATA, and writes a REQUEST into one of its pages

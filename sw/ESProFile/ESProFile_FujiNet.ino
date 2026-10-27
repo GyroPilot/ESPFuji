@@ -1,6 +1,6 @@
 // ESProFile_FujiNet.ino -- ESPFuji: the FujiNet MAILBOX.  The drive answers network requests written into
 // a file by a Lisa program.  EXPERIMENT, October 2026, Tim O'Connor (bmwcyclist) with Claude.
-// NOT published; nothing goes anywhere until Alex Anderson has seen it.  GPL-3.0.
+// Public since 27 Oct 2026 with Alex Anderson-McLeod's agreement (github.com/GyroPilot/ESPFuji).  GPL-3.0.
 //
 // Compiled in only with FUJINET_MAILBOX defined (see ESProFile.ino).  The three hooks in the
 // emulator are tiny: mbSetup() from emulatorSetup(), mbOnWrite() in writeDrive() before the block
