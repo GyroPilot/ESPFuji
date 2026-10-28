@@ -34,8 +34,10 @@ def main():
         for line in text.splitlines():
             if "flash size" in line.lower():
                 size = line.split(":")[-1].strip().split()[0]
-        print("backing up", size, "to", out, flush=True)
-        rc = esptool("--port", port, "--baud", "460800", "read-flash", "0", size, out)
+        units = {"KB": 1024, "MB": 1024 * 1024}
+        nbytes = int(size[:-2]) * units[size[-2:].upper()] if size[-2:].upper() in units else int(size, 0)
+        print("backing up", size, "(%d bytes) to" % nbytes, out, flush=True)
+        rc = esptool("--port", port, "--baud", "460800", "read-flash", "0", str(nbytes), out)
         print("SAVED" if rc == 0 else "FAILED", out); return rc
     if what in ("flash", "restore"):
         if len(sys.argv) < 4:
