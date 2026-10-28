@@ -45,7 +45,7 @@
 #endif
 // WiFi.h, WiFiClientSecure.h and HTTPClient.h are included at the top of ESProFile.ino (before the emulator defines).
 
-#define ESPFUJI_VERSION "ESPFuji 0.5"
+#define ESPFUJI_VERSION "ESPFuji 0.5.1"
 #define MB_NET_CORE   0                                // Wi-Fi's core; the interface owns core 1 with interrupts off
 #define MB_BODY_MAX   32768                            // the largest page body kept (a Lisa picture is 13 KB)
 #define MB_JOIN_MS    8000                             // how long mbSetup waits for the first Wi-Fi join
@@ -192,7 +192,11 @@ static const char *mbWifiWord() {
 // ---- the network core -----------------------------------------------------------------------------
 
 // OPEN: fetch the whole body now; the Lisa reads it in pages with READ.
-static void mbFetch(const char *url, char *out, size_t outsz) {
+static void mbFetch(char *url, char *out, size_t outsz) {
+    for (char *q = url; *q && *q != ':' && *q != '/'; q++) // 0.5.1: the scheme in lower case, in place. The Lisa
+        *q = tolower((unsigned char)*q);                 // tools write N1:HTTP://..., which the FujiNet accepts and
+                                                       // HTTPClient (case-sensitive) refused: "ERROR bad address"
+                                                       // on the 2/10, 28 Oct, LisaFuji's first fetch via the drive
     uint32_t tStart = millis(), tGet = 0;
     trFetches++;
     mbBodyLen = 0;
