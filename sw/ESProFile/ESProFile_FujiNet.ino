@@ -101,7 +101,8 @@ static uint32_t trLastMs = 0, trLastGet = 0, trWorstMs = 0, trFetches = 0, trSlo
 static uint32_t trServeWorst = 0;                     // the longest any request took to answer (ms)
 static uint32_t trStackMin = 0xFFFFFFFF;              // the least stack the net task has had left (bytes)
 static char     trWorstStage[8] = "-";
-static bool     mbSntpOn = false;                     // 0.5: SNTP started once Wi-Fi is up; CLOCK answers UTC
+static bool     mbSntpOn = false;
+static int      mbNetFails = 0;                       // 0.5: consecutive fetches that could not even connect                     // 0.5: SNTP started once Wi-Fi is up; CLOCK answers UTC
 
 static void trNote(const char *stage, uint32_t tStart, uint32_t tGet) {
     uint32_t ms = millis() - tStart;
@@ -252,8 +253,17 @@ static void mbFetch(const char *url, char *out, size_t outsz) {
         snprintf(out, outsz, "ERROR %s", http.errorToString(code).c_str());
         http.end();
         trNote("get", tStart, tGet);
+        if (code == HTTPC_ERROR_CONNECTION_REFUSED || code == HTTPC_ERROR_CONNECTION_LOST) {
+            if (++mbNetFails >= 3) {                   // 0.5: three in a row: the link is probably dead although
+                mbNetFails = 0;                        //      WiFi.status() still says connected; join again
+                WiFi.disconnect();
+                delay(200);
+                WiFi.begin(mbCfg.ssid, mbCfg.pass);
+            }
+        }
         return;
     }
+    mbNetFails = 0;
     WiFiClient *s = http.getStreamPtr();
     int total = http.getSize();                        // -1 when the length is not known
     uint32_t t0 = millis();
@@ -507,6 +517,9 @@ void mbSetup() {
         WiFi.persistent(false);                        // never store the credentials: no flash writes later
         WiFi.onEvent(mbWifiEvent);
         WiFi.mode(WIFI_STA);
+        WiFi.setSleep(false);                          // 0.5: no modem sleep. 27 Oct: with it on, the drive fell off
+                                                       // the access point minutes into a soak while still saying
+                                                       // "connected" (pings dead, fetches stalled); ~80 mA more.
         if (mbCfg.host[0]) WiFi.setHostname(mbCfg.host);
         mbFixSsidCase();                               // "Wifi" in the file, "WiFi" on the air: take the name as broadcast
         WiFi.begin(mbCfg.ssid, mbCfg.pass);
