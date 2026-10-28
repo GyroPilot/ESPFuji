@@ -193,6 +193,8 @@ static const char *mbWifiWord() {
 
 // OPEN: fetch the whole body now; the Lisa reads it in pages with READ.
 static void mbFetch(char *url, char *out, size_t outsz) {
+    if ((url[0] == 'N' || url[0] == 'n') && url[1] >= '0' && url[1] <= '9' && url[2] == ':')
+        url += 3;                                      // 0.5.1: a FujiNet device prefix (N1:) is tolerated
     for (char *q = url; *q && *q != ':' && *q != '/'; q++) // 0.5.1: the scheme in lower case, in place. The Lisa
         *q = tolower((unsigned char)*q);                 // tools write N1:HTTP://..., which the FujiNet accepts and
                                                        // HTTPClient (case-sensitive) refused: "ERROR bad address"
