@@ -40,7 +40,9 @@
 
 #include "mailbox_core.h"
 #include "soc/uart_struct.h"
-#include "hal/uart_ll.h"
+#if defined(CONFIG_IDF_TARGET_ESP32)
+#include "hal/uart_ll.h"                              // the plain ESP32: the USB serial is UART0
+#endif
 // WiFi.h, WiFiClientSecure.h and HTTPClient.h are included at the top of ESProFile.ino (before the emulator defines).
 
 #define ESPFUJI_VERSION "ESPFuji 0.5"
@@ -383,6 +385,10 @@ static bool mbSerialWanted = false;
 // core waits for the driver's "FIFO empty" interrupt once the 128-byte FIFO fills, and that interrupt lives on the
 // interface core with interrupts off: a reply longer than the FIFO froze the net task for good (26 Oct, TRACE).
 static void mbSerialOut(const char *p, size_t n) {
+#if !defined(CONFIG_IDF_TARGET_ESP32)
+    Serial.write((const uint8_t *)p, n);               // ESP32-S3: USB CDC (setTxTimeoutMs(0) in ESProFile.ino: never blocks). UNTESTED
+    return;
+#else
     while (n) {
         uint32_t room = uart_ll_get_txfifo_len(&UART0);   // free bytes of the 128; keep well clear of full,
         if (room < 96) { delay(1); continue; }            // a slightly stale count must never overflow it
@@ -391,6 +397,7 @@ static void mbSerialOut(const char *p, size_t n) {
         p += k;
         n -= k;
     }
+#endif
 }
 static uint16_t mbSerialSeq = 9000;
 
@@ -413,8 +420,13 @@ static void mbSerialLine(const char *txt) {
 static void mbSerialPoll(void) {
     static char line[200];
     static int n = 0;
+#if defined(CONFIG_IDF_TARGET_ESP32)
     while (UART0.status.rxfifo_cnt) {
         char c = (char)UART0.fifo.rw_byte;
+#else
+    while (Serial.available()) {                       // ESP32-S3: USB CDC. UNTESTED on real hardware
+        char c = (char)Serial.read();
+#endif
         if (c == '\n' || c == '\r') {
             if (n) { line[n] = 0; mbSerialLine(line); n = 0; }
         } else if (n < (int)sizeof line - 1) {
