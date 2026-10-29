@@ -35,7 +35,7 @@ Put your documents away one at a time, or press the on-off button to
 save them all.
 
 11 note alert
-ESPFuji 0.1   (23 October 2026)^L^L
+ESPFuji 0.2   (29 October 2026)^L^L
 The Lisa side of the FujiNet mailbox: this tool talks to the ESProFile
 it lives on, an ESProFile running the ESPFuji firmware, through a file
 called MAILBOX.DATA beside the tool.  No serial port, no adapter.^L^L

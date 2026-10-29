@@ -1,6 +1,6 @@
 program ESPFuji;
 
-{ EFJ-MAIN.TEXT -- ESPFuji  ***  0.2 REV C  ***                          }
+{ EFJ-MAIN.TEXT -- ESPFuji  ***  0.2 REV D  ***                          }
 { REV A  23-Oct-2026  First build: the Lisa side of the FujiNet mailbox }
 {                      on an ESProFile.  NOT yet compiled on a Lisa.     }
 {                                                                        }
