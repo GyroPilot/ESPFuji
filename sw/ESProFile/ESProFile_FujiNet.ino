@@ -39,13 +39,14 @@
 #ifdef FUJINET_MAILBOX
 
 #include "mailbox_core.h"
+#include <WiFiUdp.h>                                  // 0.5.2: the idle keepalive
 #include "soc/uart_struct.h"
 #if defined(CONFIG_IDF_TARGET_ESP32)
 #include "hal/uart_ll.h"                              // the plain ESP32: the USB serial is UART0
 #endif
 // WiFi.h, WiFiClientSecure.h and HTTPClient.h are included at the top of ESProFile.ino (before the emulator defines).
 
-#define ESPFUJI_VERSION "ESPFuji 0.5.1"
+#define ESPFUJI_VERSION "ESPFuji 0.5.2"
 #define MB_NET_CORE   0                                // Wi-Fi's core; the interface owns core 1 with interrupts off
 #define MB_BODY_MAX   32768                            // the largest page body kept (a Lisa picture is 13 KB)
 #define MB_JOIN_MS    8000                             // how long mbSetup waits for the first Wi-Fi join
@@ -56,6 +57,7 @@
 
 struct MbRequest {
     volatile bool pending;                             // set by the interface core, cleared by the net task
+    bool     serial;                                   // 0.5.2: typed on the USB port (its reply goes back there, never to the Lisa)
     uint32_t block;                                    // the block the request was written on
     uint16_t fileid;                                   // the mailbox file's S-file ID (from the tag)
     uint16_t relpage;                                  // which page of the file
@@ -101,8 +103,10 @@ static uint32_t trLastMs = 0, trLastGet = 0, trWorstMs = 0, trFetches = 0, trSlo
 static uint32_t trServeWorst = 0;                     // the longest any request took to answer (ms)
 static uint32_t trStackMin = 0xFFFFFFFF;              // the least stack the net task has had left (bytes)
 static char     trWorstStage[8] = "-";
-static bool     mbSntpOn = false;
-static int      mbNetFails = 0;                       // 0.5: consecutive fetches that could not even connect                     // 0.5: SNTP started once Wi-Fi is up; CLOCK answers UTC
+static bool     mbSntpOn = false;                     // 0.5: SNTP started once Wi-Fi is up; CLOCK answers UTC
+static int      mbNetFails = 0;                       // 0.5: consecutive fetches that could not even connect
+static volatile bool mbRejoinAsk = false;             // 0.5.2: a fetch found no address: the task joins again now
+static uint32_t mbLastNet = 0;                        // 0.5.2: millis() of the last fetch or keepalive
 
 static void trNote(const char *stage, uint32_t tStart, uint32_t tGet) {
     uint32_t ms = millis() - tStart;
@@ -127,6 +131,7 @@ bool mbOnWrite(uint32_t blockNum, const uint8_t *blk) {
     mbReq.relpage = mb_tag_relpage(blk);
     mbReq.seq = h.seq;
     mbReq.len = h.len;
+    mbReq.serial = false;
     memcpy(mbReq.payload, h.payload, h.len);
     mbRep.ready = false;                               // an old reply is not the answer to this
     mbReq.pending = true;
@@ -178,9 +183,13 @@ static void mbReadConfig() {
                   mbCfg.ssid[0] ? "yes" : "MISSING", mbCfg.pass[0] ? "yes" : "MISSING", mbCfg.host[0] ? mbCfg.host : "(none)");
 }
 
+static bool mbHaveIp() {                              // 0.5.2: "connected" is not enough: the address can be gone
+    return WiFi.status() == WL_CONNECTED && (uint32_t)WiFi.localIP() != 0;
+}
+
 static const char *mbWifiWord() {
     switch (WiFi.status()) {
-        case WL_CONNECTED: return "connected";
+        case WL_CONNECTED: return mbHaveIp() ? "connected" : "no address";
         case WL_NO_SSID_AVAIL: return "no such network";
         case WL_CONNECT_FAILED: return "join failed";
         case WL_DISCONNECTED: return "disconnected";
@@ -205,8 +214,10 @@ static void mbFetch(char *url, char *out, size_t outsz) {
     mbTruncated = false;
     mbBodyOpen = false;
     mbHttpCode = 0;
-    if (WiFi.status() != WL_CONNECTED) {
-        snprintf(out, outsz, "ERROR no wifi (%s)", mbWifiWord());
+    if (!mbHaveIp()) {                                 // 0.5.2: no address = no fetch; say so at once and join again.
+        snprintf(out, outsz, "ERROR no wifi (%s)", mbWifiWord());   // 28 Oct, the 2/10: after 110 idle minutes the
+        mbRejoinAsk = true;                            // drive said "connected 0.0.0.0" and three fetches took 7 s each
+        trNote("noip", tStart, 0);                     // to fail before the old three-strikes rejoin kicked in
         return;
     }
     if (mbBody == NULL) {
@@ -270,19 +281,26 @@ static void mbFetch(char *url, char *out, size_t outsz) {
         return;
     }
     mbNetFails = 0;
+    mbLastNet = millis();
     WiFiClient *s = http.getStreamPtr();
     int total = http.getSize();                        // -1 when the length is not known
     uint32_t t0 = millis();
     uint8_t junk[256];
     bool late = false;
-    while (s && (http.connected() || s->available()) && millis() - t0 < 8000) {
+    int quiet = 0;                                     // 0.5.2: polls with nothing to read since the server closed
+    while (s && millis() - t0 < 8000) {
         if (millis() - tStart >= MB_FETCH_MS) { late = true; break; }   // 0.4: answer the Lisa with what came
         if (total >= 0 && mbBodyLen >= (uint32_t)total) break;
         size_t avail = s->available();
         if (avail == 0) {
+            // 0.5.2: the old loop left as soon as the socket said "closed" with nothing readable, and lost the tail
+            // of a page the TLS layer had not decrypted yet (28 Oct, the 2/10: the crew list, 5929 bytes, came as 3840).
+            // Now a closed socket ends the fetch only once the length is unknown, or after half a second of nothing.
+            if (!http.connected() && (total < 0 || ++quiet > 100)) break;
             delay(5);
             continue;
         }
+        quiet = 0;
         if (mbBodyLen >= MB_BODY_MAX) {
             mbTruncated = true;
             s->read(junk, avail > sizeof junk ? sizeof junk : avail);
@@ -295,6 +313,7 @@ static void mbFetch(char *url, char *out, size_t outsz) {
     }
     http.end();
     if (late) { mbTruncated = true; trCut++; }
+    if (total >= 0 && mbBodyLen < (uint32_t)total) mbTruncated = true;   // 0.5.2: short of the announced length: say so
     trNote(late ? "cut" : "body", tStart, tGet);
     mbBodyOpen = true;
     snprintf(out, outsz, "OK %lu %d%s", (unsigned long)mbBodyLen, code, mbTruncated ? " truncated" : "");
@@ -395,7 +414,6 @@ static void mbFixSsidCase(void) {
 
 // A request typed on the USB serial port goes through the same path as a mailbox page (any build): the
 // drive can be exercised from the banana with the real emulator running, no Lisa needed.
-static bool mbSerialWanted = false;
 
 // 0.4: replies go out the way requests come in, straight through the UART0 transmit FIFO.  Serial.print from this
 // core waits for the driver's "FIFO empty" interrupt once the 128-byte FIFO fills, and that interrupt lives on the
@@ -425,11 +443,17 @@ static void mbSerialLine(const char *txt) {
     mb_build_data(page + MB_TAG, ++mbSerialSeq, MB_REQUEST, 0, (const uint8_t *)txt, strlen(txt));
     page[11] = 0;
     page[11] = mb_page_xor(page);
+    if (mbReq.pending && !mbReq.serial) {              // 0.5.2: never push a Lisa's request out of the slot
+        mbSerialOut("(busy: a Lisa request is waiting; try again)\r\n", 46);
+        return;
+    }
     uint16_t keep = mbFileId;                          // the Lisa's real mailbox file stays known
     mbOnWrite(1234, page);
     mbFileId = keep;
-    mbSerialWanted = true;
-}
+    mbReq.serial = true;                               // 0.5.2: the flag travels with the request. Until now a global
+}                                                      // flag handed the NEXT reply to the USB port, whoever asked: on
+                                                       // 28 Oct the banana's 2-second STATUS polls stole every slow
+                                                       // reply from the Lisa (Checkers waited 40 s for nothing).
 
 // The UART driver's receive interrupt lives on the interface core, which runs with interrupts off, so
 // Serial.available() never sees a byte there: this reads the UART0 receive FIFO directly (128 bytes).
@@ -469,13 +493,35 @@ static void mbTask(void *arg) {
             }
             lastJoin = millis();
         }
-        if (!mbSntpOn && WiFi.status() == WL_CONNECTED) {   // 0.5: the clock, once the network is there
+        if (!mbSntpOn && mbHaveIp()) {                 // 0.5: the clock, once the network is there
             configTime(0, 0, "pool.ntp.org", "time.nist.gov");
             mbSntpOn = true;
+        }
+        // 0.5.2: "connected" without an address for 20 s, or a fetch that found none: join again now
+        // (the three-strikes rule of 0.5 cost the Lisa three 40-second waits on 28 Oct).
+        static uint32_t noIpSince = 0;
+        bool noIp = WiFi.status() == WL_CONNECTED && (uint32_t)WiFi.localIP() == 0;
+        if (!noIp) noIpSince = millis();
+        if (mbCfg.have && (mbRejoinAsk || millis() - noIpSince > 20000) && millis() - lastJoin > 15000) {
+            mbRejoinAsk = false;
+            noIpSince = millis();
+            WiFi.disconnect();
+            delay(300);
+            WiFi.begin(mbCfg.ssid, mbCfg.pass);
+            lastJoin = millis();
+        }
+        // 0.5.2: a keepalive while idle (one empty UDP packet to the router every two minutes), so an access
+        // point that forgets quiet stations keeps this one; the soaks fetched every 10 s and never saw the drop.
+        if (mbHaveIp() && millis() - mbLastNet > 120000) {
+            WiFiUDP ka;
+            if (ka.beginPacket(WiFi.gatewayIP(), 9)) { ka.write((uint8_t)0); ka.endPacket(); }
+            ka.stop();
+            mbLastNet = millis();
         }
         if (mbReq.pending) {
             uint16_t seq = mbReq.seq, len = mbReq.len;
             uint32_t block = mbReq.block;
+            bool toSerial = mbReq.serial;              // 0.5.2: decided per request, not by a global flag
             uint8_t payload[MB_PAYLOAD];
             memcpy(payload, mbReq.payload, len);
             mbReq.pending = false;                     // taken; a newer request may now arrive
@@ -492,11 +538,9 @@ static void mbTask(void *arg) {
             mbRep.seq = seq;
             mbRep.len = outlen;
             memcpy(mbRep.payload, out, outlen);
-            mbRep.ready = true;
+            mbRep.ready = !toSerial;
             mbReplies++;
-            if (mbSerialWanted) {                      // typed on the USB port: print it there, not to the Lisa
-                mbSerialWanted = false;
-                mbRep.ready = false;
+            if (toSerial) {                            // typed on the USB port: print it there, not to the Lisa
                 char line[MB_PAYLOAD + 48];             // 0.5: on the task's stack (static DRAM is full)
                 int n = snprintf(line, sizeof line, "reply seq %u, %u bytes: ", seq, outlen);
                 for (int i = 0; i < outlen && n < (int)sizeof line - 3; i++) {
