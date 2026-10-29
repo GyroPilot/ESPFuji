@@ -27,7 +27,9 @@ written at address 0, so one file is all a board needs.  Flashing does not touch
 espfuji.ini stay as they are.  The backup file is written in the folder you run the script from; keep it, "restore"
 puts Alex's original firmware back any time.
 
-Works with esptool 4 (the version a Python 3.9 gets, e.g. Apple's) and esptool 5.
+Works with esptool 4 (the version a Python 3.9 gets, e.g. Apple's) and esptool 5.  Tried at 460800 baud first;
+if the link drops (seen on a Mac mini: every other connect fails, and faster than 115200 loses bytes), the same
+operation is repeated at 115200, which took 6 minutes for a backup and 80 seconds for a flash on macOS 15.
 """
 import subprocess, sys, time
 
@@ -56,6 +58,18 @@ def esptool(*args):
     return subprocess.call(cmd)
 
 
+def esptool_retry(port, *args):
+    """The operation at 460800, then once more at 115200 if the link dropped (macOS CP210x, 29 Oct 2026)."""
+    for baud in ("460800", "115200"):
+        rc = esptool("--port", port, "--baud", baud, "--connect-attempts", "20", *args)
+        if rc == 0:
+            return 0
+        if baud == "460800":
+            print("... that failed; trying again at 115200 (slower, more robust)", flush=True)
+            time.sleep(2)
+    return rc
+
+
 def main():
     if len(sys.argv) < 3:
         print(__doc__); return 2
@@ -63,7 +77,7 @@ def main():
     print("esptool %d.x" % MAJOR, flush=True)
     if what == "backup":
         out = time.strftime("esprofile_backup_%Y%m%d_%H%M.bin")
-        info = subprocess.run([sys.executable, "-m", "esptool", "--port", port, op("flash-id")],
+        info = subprocess.run([sys.executable, "-m", "esptool", "--port", port, "--connect-attempts", "20", op("flash-id")],
                               capture_output=True, text=True)
         text = info.stdout + info.stderr
         print(text)
@@ -76,13 +90,14 @@ def main():
         units = {"KB": 1024, "MB": 1024 * 1024}
         nbytes = int(size[:-2]) * units[size[-2:].upper()] if size[-2:].upper() in units else int(size, 0)
         print("backing up", size, "(%d bytes) to" % nbytes, out, "in this folder", flush=True)
-        rc = esptool("--port", port, "--baud", "460800", op("read-flash"), "0", str(nbytes), out)
+        time.sleep(2)                                   # the probe's reset: give the port a moment (macOS)
+        rc = esptool_retry(port, op("read-flash"), "0", str(nbytes), out)
         print("SAVED" if rc == 0 else "FAILED", out); return rc
     if what in ("flash", "restore"):
         if len(sys.argv) < 4:
             print("give the image file"); return 2
         img = sys.argv[3]
-        rc = esptool("--port", port, "--baud", "460800", op("write-flash"), "0", img)
+        rc = esptool_retry(port, op("write-flash"), "0", img)
         print("DONE: unplug and replug the board (or press its reset button)" if rc == 0 else "FAILED"); return rc
     print(__doc__); return 2
 
