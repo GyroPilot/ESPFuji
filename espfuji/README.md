@@ -63,6 +63,9 @@ the raw `.image` the ESProFile uses, both ways.
 
 - **0.5** (Releases): bounded fetches (30 s), CLOCK from SNTP, TRACE timings, and the fix for a crash the 0.3/0.4
   firmware had on servers that answered after several seconds (0 restarts in 275 such fetches; before, about 3%).
+- 0.5.2 (source; images follow the next Lisa test): a fetch without an address fails at once and the drive joins
+  the network again (0.5 waited for three failures); an idle keepalive; a page is read to its full length (0.5
+  could cut a long HTTPS page short); a request typed on the USB port can no longer take a Lisa's reply.
 - 0.3: the first build proven on the Lisa 2/10 (25 Oct 2026).
 
 Known limits: one page open at a time; HTTPS without certificate checks (like the FujiNet); no POST yet; the
