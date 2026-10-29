@@ -3,3 +3,7 @@
 ssid=YourNetworkName
 password=YourPassword
 hostname=espfuji
+# 0.5.3: your time zone as a POSIX TZ string, so CLOCK answers local time (the FujiNet does the same).
+# Cincinnati (US Eastern): timezone=EST5EDT,M3.2.0,M11.1.0    Central: CST6CDT,M3.2.0,M11.1.0
+# Mountain: MST7MDT,M3.2.0,M11.1.0   Pacific: PST8PDT,M3.2.0,M11.1.0   UK: GMT0BST,M3.5.0/1,M10.5.0   leave it out for UTC
+timezone=EST5EDT,M3.2.0,M11.1.0

@@ -35,6 +35,8 @@
 //   ssid=<network name>
 //   password=<password>
 //   hostname=espfuji          (optional)
+//   timezone=EST5EDT,M3.2.0,M11.1.0   (optional, 0.5.3: a POSIX TZ string; CLOCK then answers local time,
+//                                      as the FujiNet does.  Without it CLOCK answers UTC.)
 
 #ifdef FUJINET_MAILBOX
 
@@ -46,7 +48,7 @@
 #endif
 // WiFi.h, WiFiClientSecure.h and HTTPClient.h are included at the top of ESProFile.ino (before the emulator defines).
 
-#define ESPFUJI_VERSION "ESPFuji 0.5.2"
+#define ESPFUJI_VERSION "ESPFuji 0.5.3"
 #define MB_NET_CORE   0                                // Wi-Fi's core; the interface owns core 1 with interrupts off
 #define MB_BODY_MAX   32768                            // the largest page body kept (a Lisa picture is 13 KB)
 #define MB_JOIN_MS    8000                             // how long mbSetup waits for the first Wi-Fi join
@@ -78,6 +80,7 @@ struct MbConfig {
     char ssid[33];
     char pass[65];
     char host[33];
+    char tz[65];                                      // 0.5.3: POSIX TZ string, or empty
     bool have;
 };
 
@@ -176,11 +179,13 @@ static void mbReadConfig() {
         if (strcmp(p, "ssid") == 0) strncpy(mbCfg.ssid, v, sizeof mbCfg.ssid - 1);
         else if (strcmp(p, "password") == 0) strncpy(mbCfg.pass, v, sizeof mbCfg.pass - 1);
         else if (strcmp(p, "hostname") == 0) strncpy(mbCfg.host, v, sizeof mbCfg.host - 1);
+        else if (strcmp(p, "timezone") == 0 || strcmp(p, "tz") == 0) strncpy(mbCfg.tz, v, sizeof mbCfg.tz - 1);
     }
     f.close();
     mbCfg.have = mbCfg.ssid[0] != 0;
-    Serial.printf("ESPFuji: espfuji.ini read: ssid %s, password %s, hostname %s\n",
-                  mbCfg.ssid[0] ? "yes" : "MISSING", mbCfg.pass[0] ? "yes" : "MISSING", mbCfg.host[0] ? mbCfg.host : "(none)");
+    Serial.printf("ESPFuji: espfuji.ini read: ssid %s, password %s, hostname %s, timezone %s\n",
+                  mbCfg.ssid[0] ? "yes" : "MISSING", mbCfg.pass[0] ? "yes" : "MISSING", mbCfg.host[0] ? mbCfg.host : "(none)",
+                  mbCfg.tz[0] ? mbCfg.tz : "(none: CLOCK answers UTC)");
 }
 
 static bool mbHaveIp() {                              // 0.5.2: "connected" is not enough: the address can be gone
@@ -337,10 +342,10 @@ static void mbServe(const uint8_t *req, uint16_t len, uint8_t *out, uint16_t *ou
         snprintf(txt, sizeof txt, "requests %lu replies %lu served %lu body %lu open %d",
                  (unsigned long)mbRequests, (unsigned long)mbReplies, (unsigned long)mbServed,
                  (unsigned long)mbBodyLen, mbBodyOpen ? 1 : 0);
-    } else if (strcmp(cmd, "CLOCK") == 0) {            // 0.5: "OK yyyy mm dd hh mi ss" (UTC, from SNTP)
+    } else if (strcmp(cmd, "CLOCK") == 0) {            // 0.5: "OK yyyy mm dd hh mi ss" (SNTP; UTC, or local with timezone=)
         time_t now = time(NULL);
         struct tm t;
-        if (now < 1700000000 || !gmtime_r(&now, &t))
+        if (now < 1700000000 || !(mbCfg.tz[0] ? localtime_r(&now, &t) : gmtime_r(&now, &t)))   // 0.5.3: local with timezone=
             snprintf(txt, sizeof txt, "ERROR no time yet (%s)", mbSntpOn ? "SNTP waiting" : "no wifi");
         else
             snprintf(txt, sizeof txt, "OK %04d %02d %02d %02d %02d %02d", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
@@ -494,7 +499,8 @@ static void mbTask(void *arg) {
             lastJoin = millis();
         }
         if (!mbSntpOn && mbHaveIp()) {                 // 0.5: the clock, once the network is there
-            configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+            if (mbCfg.tz[0]) configTzTime(mbCfg.tz, "pool.ntp.org", "time.nist.gov");   // 0.5.3: local time
+            else configTime(0, 0, "pool.ntp.org", "time.nist.gov");
             mbSntpOn = true;
         }
         // 0.5.2: "connected" without an address for 20 s, or a fetch that found none: join again now
