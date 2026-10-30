@@ -1,3 +1,12 @@
+# THIS IS NOT THE OFFICIAL ESProFile REPOSITORY
+## It is Tim O'Connor's fork, for ESPFuji.
+
+The official ESProFile, Alex Anderson-McLeod's ESP32 ProFile and Widget emulator (boards, firmware, documentation, support), is at **https://github.com/alexthecat123/ESProFile**. Get your boards and the stock firmware there.
+
+This fork adds **ESPFuji**: FujiNet-style networking for the Apple Lisa through an ESProFile (a mailbox firmware, a Lisa Office System tool, a flasher), in the [`espfuji/`](espfuji/) folder and on this repository's Releases page. Everything below this notice is Alex's README as it stands upstream.
+
+---
+
 # ESProFile
 A powerful ESP32-based emulator and diagnostic tool for ProFile and Widget hard drives.
 
@@ -545,9 +554,11 @@ This is the very last menu option. I've been typing for about 9 hours straight n
 
 Let me know if you can think of anything else!
 
-# Contact Me!
+# Contact
 
-Feel free to email me at [alexelectronicsguy@gmail.com](mailto:alexelectronicsguy@gmail.com) if you need help, find any bugs, or have any questions/comments!
+**ESPFuji, the FujiNet side** (the mailbox firmware, Wi-Fi, the `espfuji.ini` file, the Lisa tools, the flasher, anything on this fork's Releases page): contact **Tim O'Connor**, by opening an issue at https://github.com/GyroPilot/ESPFuji/issues. Please do not send ESPFuji problems to Alex.
+
+**The core emulation** (the ESProFile boards, the stock emulator and diagnostic firmware, ProFile and Widget behaviour): contact **Alex** at [alexelectronicsguy@gmail.com](mailto:alexelectronicsguy@gmail.com), as for the official ESProFile.
 
 # Changelog
 1/20/2025 - Initial 1.0 Release
