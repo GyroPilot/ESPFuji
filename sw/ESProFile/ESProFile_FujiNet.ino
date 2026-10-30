@@ -48,7 +48,7 @@
 #endif
 // WiFi.h, WiFiClientSecure.h and HTTPClient.h are included at the top of ESProFile.ino (before the emulator defines).
 
-#define ESPFUJI_VERSION "ESPFuji 1.0"
+#define ESPFUJI_VERSION "ESPFuji 1.1b1"
 #define MB_NET_CORE   0                                // Wi-Fi's core; the interface owns core 1 with interrupts off
 #define MB_BODY_MAX   32768                            // the largest page body kept (a Lisa picture is 13 KB)
 #define MB_JOIN_MS    8000                             // how long mbSetup waits for the first Wi-Fi join
@@ -65,11 +65,13 @@ struct MbRequest {
     uint16_t relpage;                                  // which page of the file
     uint16_t seq;
     uint16_t len;
+    uint16_t version;                                  // 1.1: 1 = Lisa Office System, 2 = Macintosh XL (MacWorks)
     uint8_t  payload[MB_PAYLOAD];
 };
 
 struct MbReply {
     volatile bool ready;                               // set by the net task, cleared when served
+    uint16_t version;                                  // 1.1: the request's protocol version (2 = Macintosh XL)
     uint32_t block;                                    // echoed in the reply header (a READ echoes its offset)
     uint16_t seq;
     uint16_t len;
@@ -88,6 +90,8 @@ static MbRequest mbReq;
 static MbReply   mbRep;
 static MbConfig  mbCfg;
 static volatile uint16_t mbFileId = 0;                 // 0: no mailbox seen yet since power-up
+static volatile uint32_t mbXlFirst = 0;                // 1.1, version 2 (Macintosh XL): the mailbox's first block
+static volatile uint16_t mbXlCount = 0;                //   and how many blocks it has; 0 = no XL mailbox seen
 static uint32_t mbRequests = 0, mbReplies = 0, mbServed = 0;
 static uint8_t  mbReplyData[MB_DATA];                  // the reply page's data, built once per reply
 static uint8_t *mbBody = NULL;                         // the body of the page last OPENed (heap: the plain ESP32's DRAM is small)
@@ -127,13 +131,21 @@ bool mbOnWrite(uint32_t blockNum, const uint8_t *blk) {
     mb_header_t h;
     if (!mb_parse(blk, &h)) return false;
     if (h.kind != MB_REQUEST) return false;
-    mbFileId = mb_tag_fileid(blk);
+    if (h.version == MB_VERSION_XL) {                  // 1.1: MacWorks tags carry no Lisa file ID; the request says where it is
+        uint32_t first; uint16_t count;
+        if (!mb_xl_range(blockNum, &h, &first, &count)) return false;
+        mbXlFirst = first;
+        mbXlCount = count;
+    } else {
+        mbFileId = mb_tag_fileid(blk);
+    }
     // a request the net task has not taken yet is simply replaced: the newer one wins
     mbReq.block = blockNum;
     mbReq.fileid = mbFileId;
     mbReq.relpage = mb_tag_relpage(blk);
     mbReq.seq = h.seq;
     mbReq.len = h.len;
+    mbReq.version = h.version;
     mbReq.serial = false;
     memcpy(mbReq.payload, h.payload, h.len);
     mbRep.ready = false;                               // an old reply is not the answer to this
@@ -145,8 +157,15 @@ bool mbOnWrite(uint32_t blockNum, const uint8_t *blk) {
 // A block has just been read from the image into blk (532 bytes) and is about to go to the host.
 // If it belongs to the mailbox file and a reply is waiting, the reply goes instead.  Returns true
 // when the data was replaced.
-bool mbOnRead(uint8_t *blk) {
+bool mbOnRead(uint8_t *blk, uint32_t blockNum) {
     if (!mbRep.ready) return false;
+    if (mbRep.version == MB_VERSION_XL) {              // 1.1: the Macintosh XL's mailbox is a block range, not a tag
+        if (mbXlCount == 0 || blockNum < mbXlFirst || blockNum - mbXlFirst >= mbXlCount) return false;
+        mb_build_data_v(mbReplyData, MB_VERSION_XL, mbRep.seq, MB_REPLY, mbRep.block, mbRep.payload, mbRep.len);
+        mb_swap_data_xl(blk, mbReplyData);             // keeps the Mac tag; byte 19 stays right
+        mbServed++;
+        return true;
+    }
     if (mbFileId == 0 || mb_tag_fileid(blk) != mbFileId) return false;
     mb_build_data(mbReplyData, mbRep.seq, MB_REPLY, mbRep.block, mbRep.payload, mbRep.len);
     mb_swap_data(blk, mbReplyData);                    // keeps the tag; fixes the checksum byte
@@ -525,7 +544,7 @@ static void mbTask(void *arg) {
             mbLastNet = millis();
         }
         if (mbReq.pending) {
-            uint16_t seq = mbReq.seq, len = mbReq.len;
+            uint16_t seq = mbReq.seq, len = mbReq.len, ver = mbReq.version;
             uint32_t block = mbReq.block;
             bool toSerial = mbReq.serial;              // 0.5.2: decided per request, not by a global flag
             uint8_t payload[MB_PAYLOAD];
@@ -542,6 +561,7 @@ static void mbTask(void *arg) {
             if (hwm < trStackMin) trStackMin = hwm;
             mbRep.block = echo ? echo : block;
             mbRep.seq = seq;
+            mbRep.version = ver;
             mbRep.len = outlen;
             memcpy(mbRep.payload, out, outlen);
             mbRep.ready = !toSerial;
@@ -614,7 +634,7 @@ static void benchRequest(const char *txt) {
     }
     memset(page, 0, MB_PAGE);
     mb_put16(page + 4, 0x0101);
-    mbOnRead(page);
+    mbOnRead(page, 1234);                              // the self test wrote its request on block 1234
     mb_header_t h;
     if (!mb_parse(page, &h)) {
         Serial.println("(the reply page did not parse)");

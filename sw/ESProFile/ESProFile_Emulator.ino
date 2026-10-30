@@ -582,7 +582,7 @@ void readDrive(){
     disk.seekSet(blockNum); // Seek to our block
     disk.read(blockData+readStatusOffset, 532); // And read the block into the block data buffer
 #ifdef FUJINET_MAILBOX
-    mbOnRead(blockData+readStatusOffset); // FujiNet mailbox experiment: a waiting reply goes instead of the stored page
+    mbOnRead(blockData+readStatusOffset, blockNum / 532); // FujiNet mailbox: a waiting reply goes instead of the stored page (1.1: the block number finds a Macintosh XL mailbox; blockNum was just scaled to a byte offset)
 #endif
     Serial.println();
   }

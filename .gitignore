@@ -1,2 +1,5 @@
 sw/ESProFile/build/
 toolchain_lib.log
+
+# ESPFuji XL build output
+espfuji/macxl-tool/build/

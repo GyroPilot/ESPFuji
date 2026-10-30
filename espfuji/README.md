@@ -70,6 +70,12 @@ applications, and they find the drive by themselves.
   **Every tool must sit in the same ProFile window as the test tool**: a Lisa with two ESProFiles shows two
   windows both named ProFile, and a tool looks for MAILBOX.DATA only on its own volume.
 
+## Use, on a Macintosh XL (MacWorks), beta
+
+**ESPFuji XL** (`espfuji/macxl-tool`, 1.1b1 pre-release): a Mac application for MacWorks Plus and Plus II that talks
+to the same drive (Hello, Wi-Fi, set the Mac's clock, open a page, news). It needs firmware **1.1b1 or later**: 1.0
+never answers it. Not yet tried on a real Macintosh XL; see [its README](macxl-tool/README.md).
+
 ## Bench, without a Lisa
 
 The same requests can be typed on the drive's USB serial port (115200): `python espfuji/tools/bench_talk.py COM7`
@@ -91,6 +97,8 @@ the raw `.image` the ESProFile uses, both ways.
 - The flasher works with esptool 4 and 5 (esptool 4 is what a Python 3.9, e.g. Apple's, installs) and falls back
   from 460800 to 115200 baud when the link drops. Tested 29 Oct 2026 on macOS 15.8.1 (Apple's Python 3.9, esptool 4)
   with a second ESProFile: backup, flash, boot; and on Windows 10 (Python 3.12, esptool 5).
+- **1.1b1** (pre-release, 30 Oct 2026): the Macintosh XL (mailbox protocol version 2) and ESPFuji XL 0.1d1.
+  The Lisa side is unchanged from 1.0. Host-tested and run in an emulator only.
 - 0.3: the first build proven on the Lisa 2/10 (25 Oct 2026).
 
 Known limits: one page open at a time; HTTPS without certificate checks (like the FujiNet); no POST yet; the
