@@ -54,6 +54,9 @@ a mailbox page, nothing changes.
 
 ## Use, on the Lisa
 
+The test tool is the diagnostic (hello, Wi-Fi, one raw page, counters) and makes the mailbox file; LisaFuji and LisaCheckers are the
+applications, and they find the drive by themselves.
+
 - **ESPFuji test tool** (`espfuji/lisa-tool`; the `.dc42` floppy image on the Releases page goes onto a Lisa through a
   Floppy Emu, a BlueSCSI, LisaEm, or a real drive written from a Mac): copy it to the ESProFile's volume and open it. It makes `MAILBOX.DATA` beside itself the first time. **H** asks the drive HELLO (version, uptime, Wi-Fi,
   address, free memory); **W** the Wi-Fi state; **G** fetches a web page and shows it; **S** the counters.
