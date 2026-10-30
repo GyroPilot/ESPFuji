@@ -81,7 +81,9 @@ the raw `.image` the ESProFile uses, both ways.
   again (0.5 waited for three failures); an idle keepalive; a page is read to its full length (0.5 could cut a
   long HTTPS page short); a request typed on the USB port can no longer take a Lisa's reply. Idle soak 8 h clean;
   LisaFuji's four services, CLOCK and a complete LisaCheckers game through the drive on a Lisa 2/10.
-- 0.5.3 (source): `timezone=` in espfuji.ini, so CLOCK answers local time.
+- **1.0** (Releases, 30 Oct 2026): the 0.5.3 code with the version changed. 0.5.3 added `timezone=` in espfuji.ini, so
+  CLOCK answers local time (checked on a second board flashed from macOS, then a day of idle soak with CLOCK every
+  15 minutes, 0 cut, 0 lost). Nothing else moved between the last test and the release.
 - The flasher works with esptool 4 and 5 (esptool 4 is what a Python 3.9, e.g. Apple's, installs) and falls back
   from 460800 to 115200 baud when the link drops. Tested 29 Oct 2026 on macOS 15.8.1 (Apple's Python 3.9, esptool 4)
   with a second ESProFile: backup, flash, boot; and on Windows 10 (Python 3.12, esptool 5).

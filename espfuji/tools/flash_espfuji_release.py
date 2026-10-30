@@ -13,7 +13,7 @@ the Lisa OFF (the USB cable alone powers the ESP32 for flashing; the Lisa must n
 with that Python -- "python" below means espfuji-env\\Scripts\\python on Windows, espfuji-env/bin/python elsewhere:
 
    python flash_espfuji_release.py backup  COM7            save what is on the board now (ALWAYS do this first)
-   python flash_espfuji_release.py flash   COM7 ESPFuji_0.5.3_esp32.merged.bin
+   python flash_espfuji_release.py flash   COM7 ESPFuji_1.0_esp32.merged.bin
    python flash_espfuji_release.py restore COM7 esprofile_backup_<date>.bin
 
 The port: Windows COMn (Device Manager, Ports); macOS /dev/cu.usbserial-XXXX for a plain ESP32 board (or
