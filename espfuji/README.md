@@ -4,10 +4,8 @@ Network access for the Apple Lisa through an **ESProFile**, Alex Anderson-McLeod
 (https://github.com/alexthecat123/ESProFile). No serial adapter, no extra box: the drive the Lisa already boots
 from joins your Wi-Fi and fetches web pages for Lisa Office System programs.
 
-This repository is a fork of Alex's, published with his agreement (27 Oct 2026). The ESProFile hardware and the
-original emulator firmware are Alex's work; questions about the hardware go to him, questions about ESPFuji here.
-**ESPFuji is not the official ESProFile firmware.** Beta: it works on one Lisa 2/10 and has been soaked for hours
-on the bench, and that is the extent of the testing so far.
+**ESPFuji is not the official ESProFile firmware, and this is not the official ESProFile repository.** Alex has approved of this being published, but he does not support the ESPFuji firmware in any way: the mailbox code, the Lisa tools and the flasher are Tim O'Connor's, and questions or bugs about them go to this repository's Issues, never to Alex. The ESProFile boards and the stock emulator firmware remain Alex's work and his to support.
+Tested on one Lisa 2/10 and two ESProFile boards; the soaks and the Lisa runs are listed under Status below.
 
 ## How it works
 
