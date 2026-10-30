@@ -57,10 +57,12 @@ a mailbox page, nothing changes.
 - **ESPFuji test tool** (`espfuji/lisa-tool`; the `.dc42` floppy image on the Releases page goes onto a Lisa through a
   Floppy Emu, a BlueSCSI, LisaEm, or a real drive written from a Mac): copy it to the ESProFile's volume and open it. It makes `MAILBOX.DATA` beside itself the first time. **H** asks the drive HELLO (version, uptime, Wi-Fi,
   address, free memory); **W** the Wi-Fi state; **G** fetches a web page and shows it; **S** the counters.
-- **LisaFuji 1.2 REV V** (news, Wikipedia, the space station, weather; https://github.com/GyroPilot/Apple-LisaFuji)
-  finds the drive by itself: put it on the ESProFile's volume, run the test tool once so the mailbox file exists,
-  and its first line reads "the ESProFile" instead of a serial port. Every page then comes through the drive.
-  LisaCheckers, LisaSalvo and Harbor Raid do the same (first complete game through an ESProFile: 29 Oct 2026).
+- **LisaFuji 1.2** (30 October 2026 or later; news, Wikipedia, the space station, weather, the clock;
+  https://github.com/GyroPilot/Apple-LisaFuji/releases) finds the drive by itself: put it on the ESProFile's volume, run
+  the test tool once so the mailbox file exists, and its first line reads "the ESProFile" instead of a serial port.
+  Every page then comes through the drive. **LisaCheckers 1.2** (https://github.com/GyroPilot/Apple-LisaCheckers/releases)
+  does the same (first complete game through an ESProFile: 29 Oct 2026). **Earlier releases of both (LisaFuji 1.1, the
+  1.2 beta of 23 October, LisaCheckers 1.1) do not know the drive and only talk to a serial FujiNet: update them.**
   **Every tool must sit in the same ProFile window as the test tool**: a Lisa with two ESProFiles shows two
   windows both named ProFile, and a tool looks for MAILBOX.DATA only on its own volume.
 
