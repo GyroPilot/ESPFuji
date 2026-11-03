@@ -8,7 +8,9 @@
  *   2. a version 2 request makes the mailbox = blocks b-k .. b-k+n-1, and only those get the reply;
  *   3. the swap keeps tag byte 19 right (the page still XORs to 0) and never touches the Mac tag's other bytes;
  *   4. a block of another Mac file with the SAME flag word in bytes 4-5 is never swapped (1.0's danger);
- *   5. firmware 1.0's parser (version must be 1) rejects a version 2 page.
+ *   5. firmware 1.0's parser (version must be 1) rejects a version 2 page;
+ *   6. (1.1b2) with MacWorks's ProFile interleave, every mailbox page gets the reply and no block of another file in
+ *      1.1b1's range does (1.1b1 swapped them: -199 and crashes on Tim's XL, 2 Nov 2026).
  * Build:  cc -I../src -I../../../sw/ESProFile -o xl_end_to_end xl_end_to_end.c ../src/xlproto.c && ./xl_end_to_end
  */
 #include <stdio.h>
@@ -55,7 +57,7 @@ static void driveRead(uint32_t b, uint8_t *out) {
     memcpy(out, disk[b], MB_PAGE);
     if (!rep.ready) return;
     if (rep.version == MB_VERSION_XL) {
-        if (xlCount == 0 || b < xlFirst || b - xlFirst >= xlCount) return;
+        if (!mb_xl_is_mailbox_page(out, xlCount)) return;      /* 1.1b2, as in the firmware */
         mb_build_data_v(data, MB_VERSION_XL, rep.seq, MB_REPLY, rep.block, rep.payload, rep.len);
         mb_swap_data_xl(out, data);
     } else {
@@ -129,6 +131,34 @@ int main(void) {
     /* 5. firmware 1.0's rule: version must be exactly 1 */
     XLBuildPage(data, 1, XL_REQUEST, 0, 64, (const unsigned char *)"HELLO", 5);
     CHECK(((data[8] << 8) | data[9]) != 1, "a 1.0 drive's mb_parse (version == 1 only) rejects every XL page");
+
+    /* 6. MacWorks interleave: logical block L of a 16-block group sits at drive block (L & ~15) | where[L & 15] */
+    {
+        static const unsigned char T[16] = { 0, 13, 10, 7, 4, 1, 14, 11, 8, 5, 2, 15, 12, 9, 6, 3 };   /* drive slot -> logical */
+        unsigned char where[16]; unsigned j, foreign = 0, served = 0, oldWouldSwap = 0;
+        const uint32_t BASE = 2240;           /* a 16-aligned spot, like 2257..2399 on Tim's disk */
+        unsigned short k = 9, seq = 77;
+        uint32_t bk, first;
+        for (j = 0; j < 16; j++) where[T[j]] = (unsigned char)j;
+        #define DRV(L) ((((L) + BASE) & ~15u) | where[((L) + BASE) & 15])
+        for (i = BASE - 32; i < BASE + N + 32; i++) { memset(data, 0x44, MB_DATA); macWrite(i, 0x99, 0x8100, (uint16_t)i, data); }
+        for (i = 0; i < N; i++) { XLBuildPage(data, 0, XL_IDLE, (unsigned short)i, (unsigned short)N, NULL, 0); macWrite(DRV(i), MAILFILE, 0x8100, (uint16_t)i, data); }
+        XLBuildPage(data, seq, XL_REQUEST, k, (unsigned short)N, (const unsigned char *)"NEWS", 4);
+        bk = DRV(k); macWrite(bk, MAILFILE, 0x8100, k, data);
+        driveNet();
+        first = bk - k;
+        for (i = 0; i < N; i++) { driveRead(DRV(i), back); if (XLIsReplyTo(back + MB_TAG, seq, &xh)) served++; }
+        for (i = first; i < first + N; i++) {
+            int isMb = 0; for (j = 0; j < N; j++) if (DRV(j) == i) isMb = 1;
+            if (isMb) continue;
+            oldWouldSwap++;
+            driveRead(i, back); if (memcmp(back, disk[i], MB_PAGE) != 0) foreign++;
+        }
+        #undef DRV
+        CHECK(served == N, "interleaved: every mailbox page serves the reply");
+        CHECK(oldWouldSwap > 0, "interleaved: 1.1b1's range b-k..b-k+n-1 holds blocks of other files (the bug)");
+        CHECK(foreign == 0, "interleaved: none of those other files' blocks is swapped (1.1b2)");
+    }
 
     /* bad ranges are refused */
     {

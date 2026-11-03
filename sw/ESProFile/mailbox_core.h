@@ -99,6 +99,20 @@ static inline int mb_xl_range(uint32_t block, const mb_header_t *h, uint32_t *fi
     return 1;
 }
 
+/* 1.1b2 (2 Nov 2026): may a read of this stored page get the waiting Macintosh XL reply?  Only when the stored page
+ * is itself one of the mailbox's pages: a version 2 page for the same page count.  MacWorks interleaves its logical
+ * blocks on the ProFile (in each 16 blocks: 0, 13, 10, 7, 4, 1, 14, ...), so a file that is in one piece to the Mac
+ * is not a run of consecutive drive blocks, and 1.1b1's block range (b-k .. b-k+n-1) also caught blocks of other
+ * files: until the next request, reading them gave the reply instead (found on Tim's XL image, 2 Nov 2026). */
+static inline int mb_xl_is_mailbox_page(const uint8_t *stored, uint16_t count) {
+    mb_header_t h;
+    if (count == 0 || !mb_parse(stored, &h) || h.version != MB_VERSION_XL) return 0;
+    return (uint16_t)h.reserved == count;
+}
+
+/* 1.1b2: "no echo" for a reply.  1.1b1 used 0, so a READ at offset 0 (which echoes 0) got the block number instead. */
+#define MB_NO_ECHO 0xFFFFFFFFu
+
 /* Write a mailbox page's 512 data bytes: header + payload, zero padded, for either version. */
 static inline void mb_build_data_v(uint8_t *data, uint16_t version, uint16_t seq, uint16_t kind, uint32_t reserved,
                                    const uint8_t *payload, uint16_t len) {

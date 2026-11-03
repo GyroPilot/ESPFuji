@@ -48,7 +48,7 @@
 #endif
 // WiFi.h, WiFiClientSecure.h and HTTPClient.h are included at the top of ESProFile.ino (before the emulator defines).
 
-#define ESPFUJI_VERSION "ESPFuji 1.1b1"
+#define ESPFUJI_VERSION "ESPFuji 1.1b2"
 #define MB_NET_CORE   0                                // Wi-Fi's core; the interface owns core 1 with interrupts off
 #define MB_BODY_MAX   32768                            // the largest page body kept (a Lisa picture is 13 KB)
 #define MB_JOIN_MS    8000                             // how long mbSetup waits for the first Wi-Fi join
@@ -160,7 +160,8 @@ bool mbOnWrite(uint32_t blockNum, const uint8_t *blk) {
 bool mbOnRead(uint8_t *blk, uint32_t blockNum) {
     if (!mbRep.ready) return false;
     if (mbRep.version == MB_VERSION_XL) {              // 1.1: the Macintosh XL's mailbox is a block range, not a tag
-        if (mbXlCount == 0 || blockNum < mbXlFirst || blockNum - mbXlFirst >= mbXlCount) return false;
+        // 1.1b2: the stored page must itself be a mailbox page (MacWorks interleaves blocks; see mailbox_core.h)
+        if (!mb_xl_is_mailbox_page(blk, mbXlCount)) return false;
         mb_build_data_v(mbReplyData, MB_VERSION_XL, mbRep.seq, MB_REPLY, mbRep.block, mbRep.payload, mbRep.len);
         mb_swap_data_xl(blk, mbReplyData);             // keeps the Mac tag; byte 19 stays right
         mbServed++;
@@ -350,7 +351,7 @@ static void mbServe(const uint8_t *req, uint16_t len, uint8_t *out, uint16_t *ou
     memcpy(cmd, req, len);
     cmd[len] = 0;
     txt[0] = 0;
-    *echo = 0;
+    *echo = MB_NO_ECHO;                                // 1.1b2: 0 is a real echo (READ at offset 0)
     if (strncmp(cmd, "ECHO ", 5) == 0) {
         snprintf(txt, sizeof txt, "OK %s", cmd + 5);
     } else if (strcmp(cmd, "HELLO") == 0) {
@@ -552,14 +553,14 @@ static void mbTask(void *arg) {
             mbReq.pending = false;                     // taken; a newer request may now arrive
             uint8_t out[MB_PAYLOAD];
             uint16_t outlen = 0;
-            uint32_t echo = 0;
+            uint32_t echo = MB_NO_ECHO;
             uint32_t tServe = millis();
             mbServe(payload, len, out, &outlen, &echo);
             tServe = millis() - tServe;
             if (tServe > trServeWorst) trServeWorst = tServe;
             uint32_t hwm = uxTaskGetStackHighWaterMark(NULL);
             if (hwm < trStackMin) trStackMin = hwm;
-            mbRep.block = echo ? echo : block;
+            mbRep.block = echo != MB_NO_ECHO ? echo : block;   // 1.1b2: "echo ? echo : block" lost READ 0's echo
             mbRep.seq = seq;
             mbRep.version = ver;
             mbRep.len = outlen;
@@ -568,7 +569,8 @@ static void mbTask(void *arg) {
             mbReplies++;
             if (toSerial) {                            // typed on the USB port: print it there, not to the Lisa
                 char line[MB_PAYLOAD + 48];             // 0.5: on the task's stack (static DRAM is full)
-                int n = snprintf(line, sizeof line, "reply seq %u, %u bytes: ", seq, outlen);
+                int n = snprintf(line, sizeof line, "reply seq %u, %u bytes, echo %ld: ", seq, outlen,
+                                 echo != MB_NO_ECHO ? (long)echo : -1L);   // 1.1b2: the echo, for the bench
                 for (int i = 0; i < outlen && n < (int)sizeof line - 3; i++) {
                     char c = (char)out[i];
                     line[n++] = (c >= 32 && c < 127) || c == '\n' ? c : '.';
