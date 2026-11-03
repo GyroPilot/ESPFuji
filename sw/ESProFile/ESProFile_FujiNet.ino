@@ -48,7 +48,7 @@
 #endif
 // WiFi.h, WiFiClientSecure.h and HTTPClient.h are included at the top of ESProFile.ino (before the emulator defines).
 
-#define ESPFUJI_VERSION "ESPFuji 1.1b2"
+#define ESPFUJI_VERSION "ESPFuji 1.1b3"
 #define MB_NET_CORE   0                                // Wi-Fi's core; the interface owns core 1 with interrupts off
 #define MB_BODY_MAX   32768                            // the largest page body kept (a Lisa picture is 13 KB)
 #define MB_JOIN_MS    8000                             // how long mbSetup waits for the first Wi-Fi join
@@ -114,6 +114,8 @@ static bool     mbSntpOn = false;                     // 0.5: SNTP started once 
 static int      mbNetFails = 0;                       // 0.5: consecutive fetches that could not even connect
 static volatile bool mbRejoinAsk = false;             // 0.5.2: a fetch found no address: the task joins again now
 static uint32_t mbLastNet = 0;                        // 0.5.2: millis() of the last fetch or keepalive
+static int      trReadErr = 0;                        // 1.1b3: the last negative read() in a fetch
+static char     trTlsErr[48] = "none";                // 1.1b3: the TLS error of the last fetch that came up short
 
 static void trNote(const char *stage, uint32_t tStart, uint32_t tGet) {
     uint32_t ms = millis() - tStart;
@@ -310,31 +312,32 @@ static void mbFetch(char *url, char *out, size_t outsz) {
     WiFiClient *s = http.getStreamPtr();
     int total = http.getSize();                        // -1 when the length is not known
     uint32_t t0 = millis();
-    uint8_t junk[256];
     bool late = false;
     int quiet = 0;                                     // 0.5.2: polls with nothing to read since the server closed
     while (s && millis() - t0 < 8000) {
         if (millis() - tStart >= MB_FETCH_MS) { late = true; break; }   // 0.4: answer the Lisa with what came
         if (total >= 0 && mbBodyLen >= (uint32_t)total) break;
-        size_t avail = s->available();
-        if (avail == 0) {
-            // 0.5.2: the old loop left as soon as the socket said "closed" with nothing readable, and lost the tail
-            // of a page the TLS layer had not decrypted yet (28 Oct, the 2/10: the crew list, 5929 bytes, came as 3840).
-            // Now a closed socket ends the fetch only once the length is unknown, or after half a second of nothing.
+        // 1.1b3: read() every time round, not only when available() says so.  A TLS client decrypts the next
+        // record only inside read(), so on the esp32 core 3.3.12 available() stayed 0 after the first record
+        // (3 Nov, moof: a 35 KB file came as 1,371 bytes, then 8 s of nothing; 1.1b1's build stopped at 22,741).
+        if (mbBodyLen >= MB_BODY_MAX) { mbTruncated = true; break; }   // 1.1b3: full; the rest is not read
+        int n = s->read(mbBody + mbBodyLen, MB_BODY_MAX - mbBodyLen);
+        if (n < 0) trReadErr = n;                      // 1.1b3: the last negative read, for TRACE
+        if (n <= 0) {
+            // 0.5.2: a closed socket ends the fetch only once the length is unknown, or after half a second of
+            // nothing (the tail of a page the TLS layer had not decrypted yet: 28 Oct, the crew list came short).
             if (!http.connected() && (total < 0 || ++quiet > 100)) break;
             delay(5);
             continue;
         }
         quiet = 0;
-        if (mbBodyLen >= MB_BODY_MAX) {
-            mbTruncated = true;
-            s->read(junk, avail > sizeof junk ? sizeof junk : avail);
-        } else {
-            size_t room = MB_BODY_MAX - mbBodyLen;
-            int n = s->read(mbBody + mbBodyLen, avail > room ? room : avail);
-            if (n > 0) mbBodyLen += n;
-        }
+        mbBodyLen += n;
         t0 = millis();
+    }
+    if (https && mbTruncated == false && total >= 0 && mbBodyLen < (uint32_t)total) {
+        char e[32];                                    // 1.1b3: why a TLS fetch came up short, for TRACE
+        int code2 = sec.lastError(e, sizeof e);
+        snprintf(trTlsErr, sizeof trTlsErr, "%d %s at %lu of %d", code2, e, (unsigned long)mbBodyLen, total);
     }
     http.end();
     if (late) { mbTruncated = true; trCut++; }
@@ -372,11 +375,11 @@ static void mbServe(const uint8_t *req, uint16_t len, uint8_t *out, uint16_t *ou
                      t.tm_hour, t.tm_min, t.tm_sec);
     } else if (strcmp(cmd, "TRACE") == 0) {            // 0.4: timing of the fetches since power-up
         snprintf(txt, sizeof txt, "fetch last %lums (get %lu) worst %lums at %s; %lu fetches, %lu over 20s, %lu cut; "
-                 "slowest reply %lums; req %lu rep %lu; stack left %lu of %u",
+                 "slowest reply %lums; req %lu rep %lu; stack left %lu of %u; read %d; tls %s",
                  (unsigned long)trLastMs, (unsigned long)trLastGet, (unsigned long)trWorstMs, trWorstStage,
                  (unsigned long)trFetches, (unsigned long)trSlow, (unsigned long)trCut, (unsigned long)trServeWorst,
                  (unsigned long)mbRequests, (unsigned long)mbReplies,
-                 (unsigned long)trStackMin, (unsigned)MB_STACK);
+                 (unsigned long)trStackMin, (unsigned)MB_STACK, trReadErr, trTlsErr);
     } else if (strcmp(cmd, "WIFI") == 0) {
         snprintf(txt, sizeof txt, "ssid %s status %s ip %s rssi %d reason %d", mbCfg.have ? mbCfg.ssid : "(none)",
                  mbWifiWord(), WiFi.localIP().toString().c_str(), (int)WiFi.RSSI(), mbWifiReason);
