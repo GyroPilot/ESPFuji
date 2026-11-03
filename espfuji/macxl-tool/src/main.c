@@ -1,4 +1,4 @@
-/* ESPFuji XL: the ESPFuji network for a Macintosh XL (MacWorks), 0.1d2, 2 Nov 2026 (0.1d1 30 Oct; 0.1d2 adds only the Finder icon).
+/* ESPFuji XL: the ESPFuji network for a Macintosh XL (MacWorks), 0.1d3, 2 Nov 2026 (0.1d1 30 Oct; 0.1d2 the Finder icon; 0.1d3 the offset-0 READ echo).
  *
  * The ESProFile the XL boots from fetches web pages and the time over Wi-Fi.  This application talks to it through
  * MAILBOX.DATA, a 64-page file it makes in its own folder: a request goes onto page k, then the other pages are
@@ -291,7 +291,10 @@ static void OpenPage(const char *url, Boolean news)
         sprintf(cmd, "READ %lu %d", off, XL_PAYLOAD);
         err = Transact(cmd, out, &n, &echo);
         if (err) { SayError("READ", err); break; }
-        if (n <= 0 || echo != off) { Say("READ: the drive answered out of step; stopped."); break; }
+        /* 0.1d3: ESPFuji 1.1b1 echoes the request's block number, not 0, for a READ at offset 0 (the firmware's
+           "echo ? echo : block"; found on the real XL, 2 Nov 2026).  The sequence number already proves the reply is
+           fresh, so the offset-0 echo is not checked. */
+        if (n <= 0 || (off != 0 && echo != off)) { Say("READ: the drive answered out of step; stopped."); break; }
         if (have + n > kKeepText) n = (short)(kKeepText - have);
         memcpy(body + have, out, n);
         have += n;
@@ -418,7 +421,7 @@ static void Setup(void)
     gTE = TENew(&r, &r);
 
     CtoP(kNewsURL, gLastURL);
-    Say("ESPFuji XL 0.1d2: the ESPFuji network for a Macintosh XL. Test version, not supported.");
+    Say("ESPFuji XL 0.1d3: the ESPFuji network for a Macintosh XL. Test version, not supported.");
     err = OpenMailbox();
     if (err) {
         sprintf(s, "MAILBOX.DATA could not be made beside this application (error %d). It needs 32 KB in one piece on the ESPFuji drive.", (int)err);

@@ -56,7 +56,7 @@ resource 'DITL' (129) { {
         "Needs ESPFuji firmware 1.1 or later on the drive. Not supported; Tim O'Connor's lab, 2026." }
 } };
 
-resource 'vers' (1) { 0x00, 0x10, development, 0x02, verUS, "0.1d2", "0.1d2, ESPFuji XL, Macintosh XL / MacWorks" };
+resource 'vers' (1) { 0x00, 0x10, development, 0x03, verUS, "0.1d3", "0.1d3, ESPFuji XL, Macintosh XL / MacWorks" };
 
 resource 'SIZE' (-1) {
     reserved, acceptSuspendResumeEvents, reserved, canBackground, doesActivateOnFGSwitch,
