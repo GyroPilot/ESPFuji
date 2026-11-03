@@ -1,4 +1,4 @@
-/* ESPFuji XL: the ESPFuji network for a Macintosh XL (MacWorks), 0.1d1, 30 Oct 2026.
+/* ESPFuji XL: the ESPFuji network for a Macintosh XL (MacWorks), 0.1d2, 2 Nov 2026 (0.1d1 30 Oct; 0.1d2 adds only the Finder icon).
  *
  * The ESProFile the XL boots from fetches web pages and the time over Wi-Fi.  This application talks to it through
  * MAILBOX.DATA, a 64-page file it makes in its own folder: a request goes onto page k, then the other pages are
@@ -418,7 +418,7 @@ static void Setup(void)
     gTE = TENew(&r, &r);
 
     CtoP(kNewsURL, gLastURL);
-    Say("ESPFuji XL 0.1d1: the ESPFuji network for a Macintosh XL. Test version, not supported.");
+    Say("ESPFuji XL 0.1d2: the ESPFuji network for a Macintosh XL. Test version, not supported.");
     err = OpenMailbox();
     if (err) {
         sprintf(s, "MAILBOX.DATA could not be made beside this application (error %d). It needs 32 KB in one piece on the ESPFuji drive.", (int)err);

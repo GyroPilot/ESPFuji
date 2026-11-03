@@ -56,7 +56,7 @@ resource 'DITL' (129) { {
         "Needs ESPFuji firmware 1.1 or later on the drive. Not supported; Tim O'Connor's lab, 2026." }
 } };
 
-resource 'vers' (1) { 0x00, 0x10, development, 0x01, verUS, "0.1d1", "0.1d1, ESPFuji XL, Macintosh XL / MacWorks" };
+resource 'vers' (1) { 0x00, 0x10, development, 0x02, verUS, "0.1d2", "0.1d2, ESPFuji XL, Macintosh XL / MacWorks" };
 
 resource 'SIZE' (-1) {
     reserved, acceptSuspendResumeEvents, reserved, canBackground, doesActivateOnFGSwitch,
@@ -66,3 +66,9 @@ resource 'SIZE' (-1) {
     200 * 1024,
     160 * 1024
 };
+
+/* 0.1d2 (2 Nov 2026): the Finder icon.  Tim, on the real XL: the app showed the generic application icon. */
+#include "icons.r"
+data 'EFXL' (0, "Owner resource") { $"0A455350 46756A69 20584C" };   /* "ESPFuji XL" */
+resource 'FREF' (128) { 'APPL', 0, "" };
+resource 'BNDL' (128) { 'EFXL', 0, { 'ICN#', { 0, 128 }; 'FREF', { 0, 128 } } };
