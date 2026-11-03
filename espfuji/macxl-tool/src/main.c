@@ -1,4 +1,5 @@
-/* ESPFuji XL: the ESPFuji network for a Macintosh XL (MacWorks), 0.1d3, 2 Nov 2026 (0.1d1 30 Oct; 0.1d2 the Finder icon; 0.1d3 the offset-0 READ echo).
+/* ESPFuji XL: the ESPFuji network for a Macintosh XL (MacWorks), 0.1d4, 3 Nov 2026 (0.1d1 30 Oct; 0.1d2 the Finder icon; 0.1d3 the offset-0 READ echo;
+ * 0.1d4 Command-period works, and the icon gets Alex's cat).
  *
  * The ESProFile the XL boots from fetches web pages and the time over Wi-Fi.  This application talks to it through
  * MAILBOX.DATA, a 64-page file it makes in its own folder: a request goes onto page k, then the other pages are
@@ -93,14 +94,36 @@ static void Out(const char *s, long n)
 }
 static void Say(const char *s) { Out(s, (long)strlen(s)); Out("\r", 1); }
 
-static Boolean CancelPressed(void)              /* Command-period, as on any Mac */
+/* Command-period (or Escape) stops a request.  0.1d4: on Tim's XL it did nothing.  Two causes: the wait read the
+ * mailbox back to back, leaving the keyboard almost no time to be heard (the disk driver keeps interrupts off while
+ * it transfers), and a key event does not reach a busy program anyway.  So the wait now idles between reads
+ * (Idle, below), and the keys are also read directly with GetKeys, a press remembered for half a second. */
+static Boolean CancelPressed(void)
+{
+    static unsigned long cmdAt, dotAt;
+    EventRecord e;
+    unsigned char k[16];                         /* the KeyMap: key code n is bit n & 7 of byte n >> 3 */
+    unsigned long now = TickCount();
+    if (EventAvail(keyDownMask, &e)) {
+        char c = (char)(e.message & charCodeMask);
+        if (((e.modifiers & cmdKey) && (c == '.' || c == '>')) || c == 0x1B) { GetNextEvent(keyDownMask, &e); return true; }
+    }
+    GetKeys(k);
+    if ((k[0x37 >> 3] >> (0x37 & 7)) & 1) cmdAt = now;           /* Command */
+    if ((k[0x2F >> 3] >> (0x2F & 7)) & 1) dotAt = now;           /* period */
+    if ((k[0x35 >> 3] >> (0x35 & 7)) & 1) return true;           /* Escape */
+    if (cmdAt && dotAt && now - cmdAt < 30 && now - dotAt < 30) { cmdAt = dotAt = 0; return true; }
+    return false;
+}
+
+static Boolean Idle(short ticks)                 /* sleep in WaitNextEvent; true when the user stopped the request */
 {
     EventRecord e;
-    if (EventAvail(keyDownMask, &e) && (e.modifiers & cmdKey) && (e.message & charCodeMask) == '.') {
-        GetNextEvent(keyDownMask, &e);
-        return true;
-    }
-    return false;
+    if (gHasWNE && WaitNextEvent(keyDownMask | autoKeyMask, &e, ticks, NULL)) {
+        char c = (char)(e.message & charCodeMask);
+        if (((e.modifiers & cmdKey) && (c == '.' || c == '>')) || c == 0x1B) return true;
+    } else if (!gHasWNE) { unsigned long t = TickCount() + ticks; while (TickCount() < t) SystemTask(); }
+    return CancelPressed();
 }
 
 static void Breathe(void)                        /* let the drive work and other programs run */
@@ -177,7 +200,7 @@ static OSErr Transact(const char *cmd, unsigned char *out, short *outlen, unsign
     static unsigned char page[XL_PAGE];
     XLHeader h;
     unsigned long deadline;
-    short k, j = 1;
+    short k, j = 1, tries = 0;
     OSErr err;
 
     if (!gMbRef) return fnOpnErr;
@@ -198,6 +221,7 @@ static OSErr Transact(const char *cmd, unsigned char *out, short *outlen, unsign
         }
         if (CancelPressed()) return userCanceledErr;
         Breathe();
+        if (++tries > 10 && Idle(6)) return userCanceledErr;   /* 0.1d4: after ten reads, six ticks between them */
     }
     return 1;
 }
@@ -421,7 +445,7 @@ static void Setup(void)
     gTE = TENew(&r, &r);
 
     CtoP(kNewsURL, gLastURL);
-    Say("ESPFuji XL 0.1d3: the ESPFuji network for a Macintosh XL. Test version, not supported.");
+    Say("ESPFuji XL 0.1d4: the ESPFuji network for a Macintosh XL. Test version, not supported.");
     err = OpenMailbox();
     if (err) {
         sprintf(s, "MAILBOX.DATA could not be made beside this application (error %d). It needs 32 KB in one piece on the ESPFuji drive.", (int)err);

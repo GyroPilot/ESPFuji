@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""mkicon.py: ESPFuji XL's icon (original art, chosen by Tim 2 Nov 2026): a Macintosh XL, a tiny snow-capped Fuji on
-its screen, Wi-Fi waves over it.  Writes src/icons.r ('ICN#' 128: icon, then mask) and icon_preview.png (8x).
+"""mkicon.py: ESPFuji XL's icon (original art, 3 Nov 2026): the Macintosh XL with the Fuji on its screen and
+Wi-Fi, plus a cat's head sitting on top of the case beside the waves (Tim: "Maybe a cat head next to the Wi-Fi
+symbol on top of lisa"), and the cat is for Alex, who made the ESProFile (Tim, 3 Nov 2026). FujiNet XL has the same drawing without the cat.  Writes src/icons.r ('ICN#' 128: icon, then mask) and icon_preview.png (8x).
    python3 tools/mkicon.py"""
 import math
 W = 32
@@ -29,6 +30,17 @@ for r in (3.0, 6.0, 9.0):
         for x in range(W):
             dx, dy = x + 0.5 - cx, cy - (y + 0.5)
             if abs(math.hypot(dx, dy) - r) <= 0.75 and 45 <= math.degrees(math.atan2(dy, dx)) <= 135: put(x, y)
+# the cat: a head sitting on the case, ears up, eyes and nose left white
+CAT = [".#.....#.",
+       ".##...##.",
+       "#########",
+       "##.###.##",
+       "#########",
+       "####.####",
+       ".#######."]
+for dy, row in enumerate(CAT):
+    for dx, c in enumerate(row):
+        if c == "#": put(7 + dx, 4 + dy)
 # mask: the case and the keyboard solid, the waves as drawn
 mask = [row[:] for row in px]
 for y in range(11, 28):
@@ -36,7 +48,7 @@ for y in range(11, 28):
 def hexrows(g): return ["".join("%02X" % sum(g[y][xb * 8 + k] << (7 - k) for k in range(8)) for xb in range(4)) for y in range(W)]
 rows = hexrows(px) + hexrows(mask)
 with open("src/icons.r", "w") as f:
-    f.write("/* icons.r: ESPFuji XL's icon, by tools/mkicon.py (original art: a Macintosh XL with a Fuji on its screen, Wi-Fi). */\n")
+    f.write("/* icons.r: ESPFuji XL's icon, by tools/mkicon.py (original art: a Macintosh XL with a Fuji on its screen, Wi-Fi and a cat). */\n")
     f.write("data 'ICN#' (128, \"ESPFuji XL\") {\n")
     for i in range(0, 64, 4): f.write('\t$"' + "".join(rows[i:i + 4]) + '"\n')
     f.write("};\n")
