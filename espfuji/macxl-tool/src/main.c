@@ -1,4 +1,4 @@
-/* ESPFuji XL: the ESPFuji network for a Macintosh XL (MacWorks), 0.1d6, 4 Nov 2026 (0.1d1 30 Oct; 0.1d2 the Finder icon; 0.1d3 the offset-0 READ echo;
+/* ESPFuji XL: the ESPFuji network for a Macintosh XL (MacWorks), 0.1d7, 4 Nov 2026 (0.1d1 30 Oct; 0.1d2 the Finder icon; 0.1d3 the offset-0 READ echo;
  * 0.1d4 Command-period works, and the icon gets Alex's cat; 0.1d5 keys typed during a request are kept;
  * 0.1d6 the About box is no longer cut off, and Command-period also stops a page being drawn).
  *
@@ -240,6 +240,7 @@ static void SayError(const char *what, OSErr err)
     char s[160];
     if (err == 1) sprintf(s, "%s: no answer in 45 s. Is MAILBOX.DATA on the ESPFuji drive, with firmware 1.1 or later?", what);
     else if (err == userCanceledErr) sprintf(s, "%s: stopped.", what);
+    else if (err == fnOpnErr) sprintf(s, "%s: no mailbox. Copy ESPFuji XL to the ESProFile volume and open it there.", what);
     else sprintf(s, "%s: error %d.", what, (int)err);
     Say(s);
 }
@@ -455,7 +456,7 @@ static void Setup(void)
     gTE = TENew(&r, &r);
 
     CtoP(kNewsURL, gLastURL);
-    Say("ESPFuji XL 0.1d6: the ESPFuji network for a Macintosh XL. Test version, not supported.");
+    Say("ESPFuji XL 0.1d7: the ESPFuji network for a Macintosh XL. Test version, not supported.");
     err = OpenMailbox();
     if (err) {
         sprintf(s, "MAILBOX.DATA could not be made beside this application (error %d). It needs 32 KB in one piece on the ESPFuji drive.", (int)err);
