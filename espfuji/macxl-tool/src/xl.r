@@ -13,7 +13,7 @@ resource 'MENU' (129) { 129, textMenuProc, 0x7FFFFFFF, enabled, "File", {
     "Quit", noIcon, "Q", noMark, plain
 } };
 
-resource 'MENU' (130) { 130, textMenuProc, 0x7FFFFFFF, enabled, "Edit", {
+resource 'MENU' (130) { 130, textMenuProc, 0x7FFFFFFD, enabled, "Edit", {
     "Undo", noIcon, "Z", noMark, plain;
     "-", noIcon, noKey, noMark, plain;
     "Cut", noIcon, "X", noMark, plain;
@@ -22,7 +22,7 @@ resource 'MENU' (130) { 130, textMenuProc, 0x7FFFFFFF, enabled, "Edit", {
     "Clear", noIcon, noKey, noMark, plain
 } };
 
-resource 'MENU' (131) { 131, textMenuProc, 0x7FFFFFFF, enabled, "Network", {
+resource 'MENU' (131) { 131, textMenuProc, 0x7FFFFF5B, enabled, "Network", {
     "Hello (the drive)", noIcon, "H", noMark, plain;
     "Wi-Fi", noIcon, "W", noMark, plain;
     "-", noIcon, noKey, noMark, plain;
