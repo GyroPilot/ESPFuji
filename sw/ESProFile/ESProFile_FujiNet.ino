@@ -48,7 +48,7 @@
 #endif
 // WiFi.h, WiFiClientSecure.h and HTTPClient.h are included at the top of ESProFile.ino (before the emulator defines).
 
-#define ESPFUJI_VERSION "ESPFuji 1.1b3"
+#define ESPFUJI_VERSION "ESPFuji 1.1b4"
 #define MB_NET_CORE   0                                // Wi-Fi's core; the interface owns core 1 with interrupts off
 #define MB_BODY_MAX   32768                            // the largest page body kept (a Lisa picture is 13 KB)
 #define MB_JOIN_MS    8000                             // how long mbSetup waits for the first Wi-Fi join
@@ -115,7 +115,10 @@ static int      mbNetFails = 0;                       // 0.5: consecutive fetche
 static volatile bool mbRejoinAsk = false;             // 0.5.2: a fetch found no address: the task joins again now
 static uint32_t mbLastNet = 0;                        // 0.5.2: millis() of the last fetch or keepalive
 static int      trReadErr = 0;                        // 1.1b3: the last negative read() in a fetch
-static char     trTlsErr[48] = "none";                // 1.1b3: the TLS error of the last fetch that came up short
+static char     trTlsErr[36] = "none";               /* 1.1b4: 36, was 48: static DRAM is full */                // 1.1b3: the TLS error of the last fetch that came up short
+static uint16_t trHeapOpen = 0, trBlkOpen = 0;       // 1.1b4: free heap and largest free block (KB) as a fetch began,
+static uint16_t trHeapLow = 0;                       //        and the lowest free heap during it (the banana's guess,
+                                                     //        3 Nov: TLS runs short of memory on a big certificate chain)
 
 static void trNote(const char *stage, uint32_t tStart, uint32_t tGet) {
     uint32_t ms = millis() - tStart;
@@ -236,6 +239,7 @@ static void mbFetch(char *url, char *out, size_t outsz) {
                                                        // HTTPClient (case-sensitive) refused: "ERROR bad address"
                                                        // on the 2/10, 28 Oct, LisaFuji's first fetch via the drive
     uint32_t tStart = millis(), tGet = 0;
+    trHeapOpen = ESP.getFreeHeap() / 1024; trBlkOpen = ESP.getMaxAllocHeap() / 1024; trHeapLow = trHeapOpen;
     trFetches++;
     mbBodyLen = 0;
     mbTruncated = false;
@@ -332,6 +336,7 @@ static void mbFetch(char *url, char *out, size_t outsz) {
         }
         quiet = 0;
         mbBodyLen += n;
+        if (ESP.getFreeHeap() / 1024 < trHeapLow) trHeapLow = ESP.getFreeHeap() / 1024;
         t0 = millis();
     }
     if (https && mbTruncated == false && total >= 0 && mbBodyLen < (uint32_t)total) {
@@ -375,11 +380,12 @@ static void mbServe(const uint8_t *req, uint16_t len, uint8_t *out, uint16_t *ou
                      t.tm_hour, t.tm_min, t.tm_sec);
     } else if (strcmp(cmd, "TRACE") == 0) {            // 0.4: timing of the fetches since power-up
         snprintf(txt, sizeof txt, "fetch last %lums (get %lu) worst %lums at %s; %lu fetches, %lu over 20s, %lu cut; "
-                 "slowest reply %lums; req %lu rep %lu; stack left %lu of %u; read %d; tls %s",
+                 "slowest reply %lums; req %lu rep %lu; stack left %lu of %u; read %d; tls %s; heap %luk blk %luk low %luk",
                  (unsigned long)trLastMs, (unsigned long)trLastGet, (unsigned long)trWorstMs, trWorstStage,
                  (unsigned long)trFetches, (unsigned long)trSlow, (unsigned long)trCut, (unsigned long)trServeWorst,
                  (unsigned long)mbRequests, (unsigned long)mbReplies,
-                 (unsigned long)trStackMin, (unsigned)MB_STACK, trReadErr, trTlsErr);
+                 (unsigned long)trStackMin, (unsigned)MB_STACK, trReadErr, trTlsErr,
+                 (unsigned long)trHeapOpen, (unsigned long)trBlkOpen, (unsigned long)trHeapLow);
     } else if (strcmp(cmd, "WIFI") == 0) {
         snprintf(txt, sizeof txt, "ssid %s status %s ip %s rssi %d reason %d", mbCfg.have ? mbCfg.ssid : "(none)",
                  mbWifiWord(), WiFi.localIP().toString().c_str(), (int)WiFi.RSSI(), mbWifiReason);
