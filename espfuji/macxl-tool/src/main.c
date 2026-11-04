@@ -1,6 +1,6 @@
 /* ESPFuji XL: the ESPFuji network for a Macintosh XL (MacWorks), 0.1d6, 4 Nov 2026 (0.1d1 30 Oct; 0.1d2 the Finder icon; 0.1d3 the offset-0 READ echo;
  * 0.1d4 Command-period works, and the icon gets Alex's cat; 0.1d5 keys typed during a request are kept;
- * 0.1d6 the About box is no longer cut off).
+ * 0.1d6 the About box is no longer cut off, and Command-period also stops a page being drawn).
  *
  * The ESProFile the XL boots from fetches web pages and the time over Wi-Fi.  This application talks to it through
  * MAILBOX.DATA, a 64-page file it makes in its own folder: a request goes onto page k, then the other pages are
@@ -76,10 +76,15 @@ static void FitText(void)
 }
 
 /* Append text: LF becomes CR, other control characters go. */
+/* Command-period while a long page is being drawn stops the drawing: the rest of that page is skipped until the next
+ * command (Tim, 4 Nov 2026: it stopped while asking, not while filling the window). */
+static Boolean gStopDraw;
+static Boolean CancelPressed(void);
 static void Out(const char *s, long n)
 {
-    char buf[256];
+    static char buf[1024];                       /* 1 KB at a time: TEInsert rewraps the whole window each time */
     long i, j = 0;
+    if (gStopDraw) return;
     SetPort(gWin);
     TESetSelect((*gTE)->teLength, (*gTE)->teLength, gTE);
     for (i = 0; i < n; i++) {
@@ -88,9 +93,12 @@ static void Out(const char *s, long n)
         else if (c == '\r' && i + 1 < n && s[i + 1] == '\n') continue;
         else if ((unsigned char)c < 32 && c != '\r' && c != '\t') continue;
         buf[j++] = c;
-        if (j == sizeof buf) { TEInsert(buf, j, gTE); j = 0; }
+        if (j == sizeof buf) {
+            TEInsert(buf, j, gTE); j = 0;
+            if (CancelPressed()) { gStopDraw = true; TEInsert("\r(stopped)\r", 11, gTE); break; }
+        }
     }
-    if (j) TEInsert(buf, j, gTE);
+    if (j && !gStopDraw) TEInsert(buf, j, gTE);
     FitText();
 }
 static void Say(const char *s) { Out(s, (long)strlen(s)); Out("\r", 1); }
@@ -374,6 +382,7 @@ static void About(void)
 static void DoMenu(long mi)
 {
     short menu = (short)(mi >> 16), item = (short)mi;
+    gStopDraw = false;
     switch (menu) {
     case mApple:
         if (item == iAbout) About();
