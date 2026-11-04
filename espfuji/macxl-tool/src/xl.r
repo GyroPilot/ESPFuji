@@ -50,13 +50,13 @@ resource 'DLOG' (129) { { 60, 30, 226, 482 }, dBoxProc, invisible, noGoAway, 0, 
 resource 'DITL' (129) { {
     { 130, 360, 150, 432 }, Button { enabled, "OK" };
     { 10, 14, 120, 432 }, StaticText { disabled,
-        "ESPFuji XL 0.1 (test)\n\n"
+        "ESPFuji XL 0.1 (test)\r\r"
         "The ESPFuji network for a Macintosh XL running MacWorks: the ESProFile you boot from "
-        "fetches pages and the time over Wi-Fi, through the file MAILBOX.DATA beside this application.\n"
+        "fetches pages and the time over Wi-Fi, through the file MAILBOX.DATA beside this application.\r"
         "Needs ESPFuji firmware 1.1 or later on the drive. Not supported; Tim O'Connor's lab, 2026." }
 } };
 
-resource 'vers' (1) { 0x00, 0x10, development, 0x04, verUS, "0.1d4", "0.1d4, ESPFuji XL, Macintosh XL / MacWorks" };
+resource 'vers' (1) { 0x00, 0x10, development, 0x05, verUS, "0.1d5", "0.1d5, ESPFuji XL, Macintosh XL / MacWorks" };
 
 resource 'SIZE' (-1) {
     reserved, acceptSuspendResumeEvents, reserved, canBackground, doesActivateOnFGSwitch,

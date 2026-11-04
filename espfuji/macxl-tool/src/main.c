@@ -1,5 +1,5 @@
-/* ESPFuji XL: the ESPFuji network for a Macintosh XL (MacWorks), 0.1d4, 3 Nov 2026 (0.1d1 30 Oct; 0.1d2 the Finder icon; 0.1d3 the offset-0 READ echo;
- * 0.1d4 Command-period works, and the icon gets Alex's cat).
+/* ESPFuji XL: the ESPFuji network for a Macintosh XL (MacWorks), 0.1d5, 4 Nov 2026 (0.1d1 30 Oct; 0.1d2 the Finder icon; 0.1d3 the offset-0 READ echo;
+ * 0.1d4 Command-period works, and the icon gets Alex's cat; 0.1d5 keys typed during a request are kept).
  *
  * The ESProFile the XL boots from fetches web pages and the time over Wi-Fi.  This application talks to it through
  * MAILBOX.DATA, a 64-page file it makes in its own folder: a request goes onto page k, then the other pages are
@@ -116,13 +116,13 @@ static Boolean CancelPressed(void)
     return false;
 }
 
-static Boolean Idle(short ticks)                 /* sleep in WaitNextEvent; true when the user stopped the request */
+/* Sleep while a request waits; true when the user stopped it.  0.1d5: takes no key events out of the queue
+ * (CancelPressed takes only Command-period and Escape), so a key typed during a request is kept for afterwards. */
+static Boolean Idle(short ticks)
 {
     EventRecord e;
-    if (gHasWNE && WaitNextEvent(keyDownMask | autoKeyMask, &e, ticks, NULL)) {
-        char c = (char)(e.message & charCodeMask);
-        if (((e.modifiers & cmdKey) && (c == '.' || c == '>')) || c == 0x1B) return true;
-    } else if (!gHasWNE) { unsigned long t = TickCount() + ticks; while (TickCount() < t) SystemTask(); }
+    if (gHasWNE) WaitNextEvent(0, &e, ticks, NULL);
+    else { unsigned long t = TickCount() + ticks; while (TickCount() < t) SystemTask(); }
     return CancelPressed();
 }
 
@@ -445,7 +445,7 @@ static void Setup(void)
     gTE = TENew(&r, &r);
 
     CtoP(kNewsURL, gLastURL);
-    Say("ESPFuji XL 0.1d4: the ESPFuji network for a Macintosh XL. Test version, not supported.");
+    Say("ESPFuji XL 0.1d5: the ESPFuji network for a Macintosh XL. Test version, not supported.");
     err = OpenMailbox();
     if (err) {
         sprintf(s, "MAILBOX.DATA could not be made beside this application (error %d). It needs 32 KB in one piece on the ESPFuji drive.", (int)err);
