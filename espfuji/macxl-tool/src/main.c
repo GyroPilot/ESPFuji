@@ -169,7 +169,7 @@ static Boolean Contiguous(short ref)
 
 static OSErr OpenMailbox(void)
 {
-    static unsigned char page[XL_PAGE];
+    static unsigned char page[XL_PAGE] __attribute__((aligned(2)));
     short vref, k;
     long count;
     OSErr err;
@@ -206,7 +206,7 @@ static OSErr OpenMailbox(void)
  * Returns noErr, userCanceledErr (Command-period) or 1 (no answer in 45 s). */
 static OSErr Transact(const char *cmd, unsigned char *out, short *outlen, unsigned long *echo)
 {
-    static unsigned char page[XL_PAGE];
+    static unsigned char page[XL_PAGE] __attribute__((aligned(2)));
     XLHeader h;
     unsigned long deadline;
     short k, j = 1, tries = 0;
@@ -456,7 +456,7 @@ static void Setup(void)
     gTE = TENew(&r, &r);
 
     CtoP(kNewsURL, gLastURL);
-    Say("ESPFuji XL 0.1d7: the ESPFuji network for a Macintosh XL. Test version, not supported.");
+    Say("ESPFuji XL 1.0: the ESPFuji network for a Macintosh XL.");
     err = OpenMailbox();
     if (err) {
         sprintf(s, "MAILBOX.DATA could not be made beside this application (error %d). It needs 32 KB in one piece on the ESPFuji drive.", (int)err);
