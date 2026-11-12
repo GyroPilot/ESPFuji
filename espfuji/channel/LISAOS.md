@@ -4,7 +4,7 @@ How a program running under the Lisa Office System reaches the channel block of 
 driver described here is `ESPFDEMO`, revision F (11 November 2026); it runs in LisaEm and has not run on a real
 Lisa. Sources to read beside this: the Lisa Device Drivers Manual (Apple, 1984; chapters 1, 2.5 to 2.7, 3.5 and 6),
 the Lisa Office System source (`SOURCE-PROFILEASM`, `source-PROFILE`, `SOURCE-HDISK`, `SOURCE-GENIO`, `SOURCE-CD`,
-`source-DRIVERDEFS`, `source-driversubs`), and pappadf's lisa-share, the first run-time-loaded driver on this
+`source-DRIVERDEFS`, `source-driversubs`), and pappadf's lisa-share, a working run-time-loaded driver on this
 system. The driver's own source is `SOURCE-ESPFDEMO.TEXT`; the Office System tool that drives it is "ESPFuji Driver"
 (unit `EfdDrv` in `EFD-DRV.TEXT`), the working example of every call below.
 
@@ -227,4 +227,5 @@ The driver hands out client numbers and takes care of the opening and closing ca
   not yet seen.
 - A write-verify read of the channel block: the protocol says it is harmless, the driver refuses to write while
   verify is on until a Lisa has shown it so.
-- A run-time-loaded driver calling another driver's `dskio` had not been done before this one; it works in LisaEm.
+- A run-time-loaded driver calling another driver's `dskio`: lisa-share never calls another driver, so this one had
+  no precedent to lean on; it works in LisaEm.
