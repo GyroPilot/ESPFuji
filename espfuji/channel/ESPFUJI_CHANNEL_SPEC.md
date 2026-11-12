@@ -1,5 +1,7 @@
 <!-- Published 11 November 2026 from the working specification of 8 November with its sections 16 to 20, local folder names removed. Status: proposed; the drive side is PC-tested code in a private copy, the Lisa side runs in LisaEm, nothing has run on real hardware. -->
 
+> Superseded on 11 November 2026 by the documents listed in README.md (CHANNEL_PROTOCOL.md, LISAOS.md, MACWORKS.md, ESPROFILE.md, CLIENTS.md, NOTES.md). Kept unchanged as the working record; where the two disagree, the newer documents hold.
+
 # ESPFuji channel $FFFEF8: the firmware-side specification, draft 0.2 (8 November 2026; section 16 added 9 November, section 17 on 9 November, section 18 on 10 November, section 19 on 10 November, section 20 on 11 November)
 
 DRAFT for Tim, then for stepleton and Alex (LisaList2 topic 897). Nothing here is flashed; since 9 November the
