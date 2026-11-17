@@ -43,7 +43,8 @@ Everything below comes from the Releases page: the image, `flash_espfuji_release
 4. **Going back:** `flash_espfuji_release.py restore <port> esprofile_backup_<date>.bin` puts Alex's firmware back
    any time.
 5. **Tell it your network:** copy `espfuji.ini.example` to the root of the SD card as `espfuji.ini` and fill in
-   `ssid=` and `password=` (and `timezone=` if you want CLOCK in local time). The drive reads it at power-up; the
+   `ssid=` and `password=` (and `timezone=` if you want CLOCK in local time; 1.1.1 also takes `ssid2=`/`password2=`
+   up to `ssid4=` for other places, the first one in range is joined). The drive reads it at power-up; the
    password is never written into the ESP32's flash, but it sits in plain text on the card, so a guest or IoT
    network is a reasonable choice. Upper and lower case in the network name need not match.
 6. **Power up.** To watch it join: a serial terminal on the USB port at 115200 (`screen /dev/cu.usbserial-XXXX
@@ -70,11 +71,13 @@ applications, and they find the drive by themselves.
   **Every tool must sit in the same ProFile window as the test tool**: a Lisa with two ESProFiles shows two
   windows both named ProFile, and a tool looks for MAILBOX.DATA only on its own volume.
 
-## Use, on a Macintosh XL (MacWorks), beta
+## Use, on a Macintosh XL (MacWorks)
 
-**ESPFuji XL** (`espfuji/macxl-tool`, 1.1b1 pre-release): a Mac application for MacWorks Plus and Plus II that talks
-to the same drive (Hello, Wi-Fi, set the Mac's clock, open a page, news). It needs firmware **1.1b1 or later**: 1.0
-never answers it. Not yet tried on a real Macintosh XL; see [its README](macxl-tool/README.md).
+**ESPFuji XL 1.0** (`espfuji/macxl-tool`; the `.dc42` on the Releases page): a Mac application for MacWorks Plus and
+Plus II that talks to the same drive (Hello, Wi-Fi, set the Mac's clock, open a page, news). It needs firmware
+**1.1** (1.0 never answers it; see [its README](macxl-tool/README.md)). The Mac XL applications use the drive the same
+way: [FujiNet XL](https://github.com/GyroPilot/FujiNet-XL), [Browser XL](https://github.com/GyroPilot/Browser-XL),
+[Checkers XL](https://github.com/GyroPilot/Checkers-XL) and [Salvo XL](https://github.com/GyroPilot/Salvo-XL).
 
 ## Bench, without a Lisa
 
@@ -99,9 +102,16 @@ the raw `.image` the ESProFile uses, both ways.
   with a second ESProFile: backup, flash, boot; and on Windows 10 (Python 3.12, esptool 5).
 - **1.1b1** (pre-release, 30 Oct 2026): the Macintosh XL (mailbox protocol version 2) and ESPFuji XL 0.1d1.
   The Lisa side is unchanged from 1.0. Host-tested and run in an emulator only.
+- **1.1b2, 1.1b3** (pre-releases, 2-7 Nov 2026): the mailbox under MacWorks's block interleave (found on a real
+  Macintosh XL); a READ at offset 0 echoes 0; the page body read every time round. The Mac XL applications 1.1 were
+  tested with these on a real Macintosh XL and a Lisa 2/10.
+- **1.1** (Releases, 8 Nov 2026): the 1.1b3 code with the version changed. Proven 12 Nov 2026 on a Lisa 2/10's internal ESProFile (a whole LisaCheckers game against the Macintosh XL over a travel hotspot) and on the Macintosh XL's internal ESProFile (HELLO 1.1, Wi-Fi at -46 dBm).
+- **1.1.1** (Releases, 17 Nov 2026): the memory fix for "connection refused" on HTTPS after a while, plain TLS
+  error messages, Alex's emulator 1.6 range fix, and up to four networks in espfuji.ini. See CHANGELOG.md.
 - 0.3: the first build proven on the Lisa 2/10 (25 Oct 2026).
 
-Known limits: one page open at a time; HTTPS without certificate checks (like the FujiNet); no POST yet; the
+Known limits: some large HTTPS files (tens of KB) come up short, and timeapi.io refuses connections through the
+drive; one page open at a time; HTTPS without certificate checks (like the FujiNet); no POST yet; the
 Lisa reads a page in 492-byte pieces, so a 30 KB page takes a few seconds to arrive.
 
 ## Building it yourself

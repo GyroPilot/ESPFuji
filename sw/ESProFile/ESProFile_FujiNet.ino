@@ -48,10 +48,11 @@
 #endif
 // WiFi.h, WiFiClientSecure.h and HTTPClient.h are included at the top of ESProFile.ino (before the emulator defines).
 
-#define ESPFUJI_VERSION "ESPFuji 1.1"
+#define ESPFUJI_VERSION "ESPFuji 1.1.1"
 #define MB_NET_CORE   0                                // Wi-Fi's core; the interface owns core 1 with interrupts off
 #define MB_BODY_MAX   32768                            // the largest page body kept (a Lisa picture is 13 KB)
 #define MB_JOIN_MS    8000                             // how long mbSetup waits for the first Wi-Fi join
+#define MB_NETS       4                                // 1.1.1: networks espfuji.ini may list (ssid=, ssid2= ... ssid4=)
 #ifndef MB_STACK
 #define MB_STACK      12288                            // the net task's stack in bytes (0.3: 12288)
 #endif
@@ -79,12 +80,17 @@ struct MbReply {
 };
 
 struct MbConfig {
-    char ssid[33];
+    char ssid[33];                                    // the network being joined (1.1.1: the one chosen from the list)
     char pass[65];
     char host[33];
     char tz[65];                                      // 0.5.3: POSIX TZ string, or empty
     bool have;
 };
+struct MbNet { char ssid[33]; char pass[65]; };
+struct MbNetList { uint8_t n, cur; MbNet net[MB_NETS]; };   // 1.1.1: every network the ini lists, in its order
+// The list sits in the tail of the page-body heap block: ESPFuji 1.1 fills the plain ESP32's static RAM to within a
+// few bytes, so no new static variable, not even a pointer (as the 1.2 channel does with its slots).
+#define mbNets ((MbNetList *)(mbBody + MB_BODY_MAX))
 
 static MbRequest mbReq;
 static MbReply   mbRep;
@@ -182,6 +188,7 @@ bool mbOnRead(uint8_t *blk, uint32_t blockNum) {
 // espfuji.ini on the SD card: key=value lines.
 static void mbReadConfig() {
     memset(&mbCfg, 0, sizeof mbCfg);
+    if (mbBody) memset(mbNets, 0, sizeof(MbNetList));
     File32 f;
     if (!f.open("/espfuji.ini", O_RDONLY) && !f.open("espfuji.ini", O_RDONLY)) {
         Serial.println("ESPFuji: espfuji.ini did not open (no card, no file, or the volume is not mounted)");
@@ -198,14 +205,34 @@ static void mbReadConfig() {
         char *v = eq + 1;
         char *e = v + strlen(v);
         while (e > v && (e[-1] == '\r' || e[-1] == '\n' || e[-1] == ' ')) *--e = 0;
-        if (strcmp(p, "ssid") == 0) strncpy(mbCfg.ssid, v, sizeof mbCfg.ssid - 1);
-        else if (strcmp(p, "password") == 0) strncpy(mbCfg.pass, v, sizeof mbCfg.pass - 1);
-        else if (strcmp(p, "hostname") == 0) strncpy(mbCfg.host, v, sizeof mbCfg.host - 1);
+        int k = -1;                                    // 1.1.1: ssid / ssid1 .. ssid4, password / password1 .. password4
+        if (strncmp(p, "ssid", 4) == 0 && (p[4] == 0 || (p[4] >= '1' && p[4] <= '0' + MB_NETS && p[5] == 0))) k = p[4] ? p[4] - '1' : 0;
+        if (k >= 0) {
+            if (k == 0) strncpy(mbCfg.ssid, v, sizeof mbCfg.ssid - 1);
+            if (mbBody) { strncpy(mbNets->net[k].ssid, v, sizeof mbNets->net[k].ssid - 1); if (k + 1 > mbNets->n) mbNets->n = k + 1; }
+            continue;
+        }
+        if (strncmp(p, "password", 8) == 0 && (p[8] == 0 || (p[8] >= '1' && p[8] <= '0' + MB_NETS && p[9] == 0))) k = p[8] ? p[8] - '1' : 0;
+        if (k >= 0) {
+            if (k == 0) strncpy(mbCfg.pass, v, sizeof mbCfg.pass - 1);
+            if (mbBody) strncpy(mbNets->net[k].pass, v, sizeof mbNets->net[k].pass - 1);
+            continue;
+        }
+        if (strcmp(p, "hostname") == 0) strncpy(mbCfg.host, v, sizeof mbCfg.host - 1);
         else if (strcmp(p, "timezone") == 0 || strcmp(p, "tz") == 0) strncpy(mbCfg.tz, v, sizeof mbCfg.tz - 1);
     }
     f.close();
+    if (mbBody) {                                      // 1.1.1: trailing list entries without a name do not count
+        while (mbNets->n > 0 && mbNets->net[mbNets->n - 1].ssid[0] == 0) mbNets->n--;
+        if (mbCfg.ssid[0] == 0 && mbNets->n > 0) {     // ssid2 given without ssid: the first named one leads
+            for (int k = 0; k < mbNets->n; k++) if (mbNets->net[k].ssid[0]) {
+                strlcpy(mbCfg.ssid, mbNets->net[k].ssid, sizeof mbCfg.ssid); strlcpy(mbCfg.pass, mbNets->net[k].pass, sizeof mbCfg.pass); break; }
+        }
+    }
     mbCfg.have = mbCfg.ssid[0] != 0;
-    Serial.printf("ESPFuji: espfuji.ini read: ssid %s, password %s, hostname %s, timezone %s\n",
+    int nets = mbBody ? mbNets->n : (mbCfg.ssid[0] ? 1 : 0);
+    Serial.printf("ESPFuji: espfuji.ini read: %d network%s (ssid %s, password %s), hostname %s, timezone %s\n",
+                  nets, nets == 1 ? "" : "s",
                   mbCfg.ssid[0] ? "yes" : "MISSING", mbCfg.pass[0] ? "yes" : "MISSING", mbCfg.host[0] ? mbCfg.host : "(none)",
                   mbCfg.tz[0] ? mbCfg.tz : "(none: CLOCK answers UTC)");
 }
@@ -267,7 +294,8 @@ static void mbFetch(char *url, char *out, size_t outsz) {
     http.setRedirectLimit(2);                          // 0.4: each redirect is a new connection
     http.setConnectTimeout(5000);                      // 0.4: bound every stage (the library defaults add up past 40 s,
     http.setTimeout(8000);                             //      and a TLS handshake may otherwise wait 120 s): one
-    if (https) sec.setHandshakeTimeout(8);             //      connection takes at most 5 + 8 + 8 s
+    if (https) sec.setHandshakeTimeout(15);            //      connection takes at most 5 + 15 + 8 s (1.1.1: the
+                                                       //      show, 14 Nov: a slow handshake came back as "refused")
     http.setUserAgent(ESPFUJI_VERSION " (Apple Lisa)");
     const char *hdrs[] = { "Location" };
     http.collectHeaders(hdrs, 1);
@@ -283,7 +311,7 @@ static void mbFetch(char *url, char *out, size_t outsz) {
         if (where.startsWith("https://")) {
             http.end();
             sec.setInsecure();
-            sec.setHandshakeTimeout(8);
+            sec.setHandshakeTimeout(15);
             if (!http.begin(sec, where)) {
                 snprintf(out, outsz, "ERROR bad redirect");
                 return;
@@ -294,7 +322,14 @@ static void mbFetch(char *url, char *out, size_t outsz) {
     tGet = millis() - tStart;
     mbHttpCode = code;
     if (code <= 0) {
-        snprintf(out, outsz, "ERROR %s", http.errorToString(code).c_str());
+        char tlsE[48]; tlsE[0] = 0;
+        int tlsC = https ? sec.lastError(tlsE, sizeof tlsE) : 0;   // 1.1.1: say what the TLS layer saw
+        if (https && code == HTTPC_ERROR_CONNECTION_REFUSED && tGet >= 14000)
+            snprintf(out, outsz, "ERROR tls handshake timed out (%lu ms)", (unsigned long)tGet);
+        else if (https && code == HTTPC_ERROR_CONNECTION_REFUSED && tlsC != 0)
+            snprintf(out, outsz, "ERROR %s (tls %d %s)", http.errorToString(code).c_str(), tlsC, tlsE);
+        else
+            snprintf(out, outsz, "ERROR %s", http.errorToString(code).c_str());
         http.end();
         trNote("get", tStart, tGet);
         if (code == HTTPC_ERROR_CONNECTION_REFUSED || code == HTTPC_ERROR_CONNECTION_LOST) {
@@ -381,8 +416,9 @@ static void mbServe(const uint8_t *req, uint16_t len, uint8_t *out, uint16_t *ou
                  (unsigned long)mbRequests, (unsigned long)mbReplies,
                  (unsigned long)trStackMin, (unsigned)MB_STACK, trReadErr, trTlsErr);
     } else if (strcmp(cmd, "WIFI") == 0) {
-        snprintf(txt, sizeof txt, "ssid %s status %s ip %s rssi %d reason %d", mbCfg.have ? mbCfg.ssid : "(none)",
-                 mbWifiWord(), WiFi.localIP().toString().c_str(), (int)WiFi.RSSI(), mbWifiReason);
+        snprintf(txt, sizeof txt, "ssid %s status %s ip %s rssi %d reason %d net %d/%d", mbCfg.have ? mbCfg.ssid : "(none)",
+                 mbWifiWord(), WiFi.localIP().toString().c_str(), (int)WiFi.RSSI(), mbWifiReason,
+                 mbBody ? mbNets->cur + 1 : 1, mbBody ? mbNets->n : (mbCfg.have ? 1 : 0));   // 1.1.1: which of the list
     } else if (strcmp(cmd, "SCAN") == 0) {
         WiFi.disconnect();                             // a scan fails while a join is in progress
         delay(300);
@@ -423,19 +459,42 @@ static void mbServe(const uint8_t *req, uint16_t len, uint8_t *out, uint16_t *ou
 
 // SSIDs are case-sensitive and people type them from memory: scan once (about 3 s) and, when the configured name
 // matches a network only without regard to case, use the name as the network broadcasts it.
+// 1.1.1: with several networks listed, the first in the ini's order that the scan shows is the one joined; the list
+// is walked again on every fourth retry, so a drive carried from one place to another finds its network without a
+// card change (home, a phone's hotspot, a travel router).
 static void mbFixSsidCase(void) {
     int n = WiFi.scanNetworks();
-    bool exact = false; int alt = -1;
-    for (int i = 0; i < n; i++) {
-        const char *nm = WiFi.SSID(i).c_str();
-        if (strcmp(nm, mbCfg.ssid) == 0) exact = true;
-        else if (alt < 0 && strcasecmp(nm, mbCfg.ssid) == 0) alt = i;
+    int nets = mbBody ? mbNets->n : 1;
+    int chosen = -1, found = -1;
+    for (int k = 0; k < nets && chosen < 0; k++) {
+        const char *want = mbBody ? mbNets->net[k].ssid : mbCfg.ssid;
+        if (want[0] == 0) continue;
+        int alt = -1;
+        for (int i = 0; i < n; i++) {
+            const char *nm = WiFi.SSID(i).c_str();
+            if (strcmp(nm, want) == 0) { alt = i; break; }
+            if (alt < 0 && strcasecmp(nm, want) == 0) alt = i;
+        }
+        if (alt >= 0) { chosen = k; found = alt; }
     }
-    if (!exact && alt >= 0) {
-        Serial.printf("ESPFuji: espfuji.ini says %s, the network is %s: using the broadcast name\n", mbCfg.ssid, WiFi.SSID(alt).c_str());
-        strlcpy(mbCfg.ssid, WiFi.SSID(alt).c_str(), sizeof mbCfg.ssid);
-    } else if (!exact && n >= 0) {
-        Serial.printf("ESPFuji: %s not seen in a scan of %d networks (2.4 GHz only; hidden networks do not show)\n", mbCfg.ssid, n);
+    if (chosen >= 0) {
+        const char *want = mbBody ? mbNets->net[chosen].ssid : mbCfg.ssid;
+        String airS = WiFi.SSID(found);
+        const char *air = airS.c_str();
+        if (strcmp(air, want) != 0)
+            Serial.printf("ESPFuji: espfuji.ini says %s, the network is %s: using the broadcast name\n", want, air);
+        if (mbBody) {
+            if (nets > 1 && (mbNets->cur != chosen || strcmp(mbCfg.ssid, air) != 0))
+                Serial.printf("ESPFuji: network %d of %d, %s (%d dBm)\n", chosen + 1, nets, air, (int)WiFi.RSSI(found));
+            mbNets->cur = chosen;
+            strlcpy(mbCfg.pass, mbNets->net[chosen].pass, sizeof mbCfg.pass);
+        }
+        strlcpy(mbCfg.ssid, air, sizeof mbCfg.ssid);
+    } else if (n >= 0) {
+        if (nets > 1)
+            Serial.printf("ESPFuji: none of the %d listed networks seen in a scan of %d (2.4 GHz only; hidden networks do not show); trying %s\n", nets, n, mbCfg.ssid);
+        else
+            Serial.printf("ESPFuji: %s not seen in a scan of %d networks (2.4 GHz only; hidden networks do not show)\n", mbCfg.ssid, n);
     }
     WiFi.scanDelete();
 }
@@ -592,7 +651,7 @@ void mbSetup() {
     mbReq.pending = false;
     mbRep.ready = false;
     mbFileId = 0;
-    if (mbBody == NULL) mbBody = (uint8_t *)malloc(MB_BODY_MAX);   // once, here, before the interface core runs
+    if (mbBody == NULL) mbBody = (uint8_t *)malloc(MB_BODY_MAX + sizeof(MbNetList));   // once, here, before the interface core runs; 1.1.1: the network list rides in the tail
     mbReadConfig();
     if (mbCfg.have) {
         WiFi.persistent(false);                        // never store the credentials: no flash writes later

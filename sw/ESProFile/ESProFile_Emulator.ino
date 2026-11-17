@@ -10,8 +10,9 @@
 // 11/14/2025 - v1.3 - Fixed a bug where ESProFile wouldn't respond in time to satisfy the super-short timeout period of Rev. C and earlier Lisa boot ROMs, as well as a bug where a botched LOS 1.0 shutdown under the Rev. C ROMs would lead to an Error 85 on the next boot attempt.
 // 4/19/2026 - v1.4 - Added support for pin definition header files to allow easy customization of ESProFile for different board layouts, and used this to create the LisaFPGA variant of ESProFile. Also cached the ProFile read/write routines to make them fast enough for LisaFPGA's 75MHz DOTCK mode.
 // 8/21/2026 - v1.5 - Improved SD card access speeds by a factor of about 5 on average with the DUSE_SPI_ARRAY_TRANSFER build option.
+// 11/11/2026 - v1.6 - Fixed a bug in the bounds check for read/write commands that would allow a block number that was out of bounds of the image to be accepted (Alex Anderson-McLeod; taken into ESPFuji 1.1.1)
 
-#define EMULATOR_VERSION "1.5" // The version of the ESProFile emulator software; this gets printed over serial at startup
+#define EMULATOR_VERSION "1.6" // The version of the ESProFile emulator software; this gets printed over serial at startup
 
 #define readStatusOffset 4 // Status bytes are bytes 0-3 of blockData during a read
 #define writeStatusOffset 532 // And bytes 532-535 during a write
@@ -48,7 +49,7 @@ File32 scratchFile; // A file that we use as an intermediate during certain disk
 File32 sourceFile; // Source and destination files for copy operations
 File32 destFile;
 FatFile rootDir; // The root directory of the SD card
-static char buf[65536]; // A buffer that we use when copying files
+static char buf[8192]; // A buffer that we use when copying files (ESPFuji 1.1.1: was 65536; 56 KB back to the heap for TLS)
 
 char fileName[256]; // 256-character filename for disk images
 char extension[255] = ".image"; // The extension that the Selector will use for disk images
@@ -577,7 +578,7 @@ void readDrive(){
     }
   }
   // If we end up here, then our command isn't a Selector command; it's just a good old-fashioned read
-  else if(blockNum < disk.fileSize()){ // Check that the block number is within the range of the disk image
+  else if(blockNum < disk.fileSize() / 532){ // Check that the block number is within the range of the disk image (Alex's v1.6 fix, 11/11/2026)
     blockNum *= 532;
     disk.seekSet(blockNum); // Seek to our block
     disk.read(blockData+readStatusOffset, 532); // And read the block into the block data buffer
@@ -935,7 +936,7 @@ void writeDrive(){
     }
   }
   // If we end up here, then the command is just a good old-fashioned write
-  else if(blockNum < disk.fileSize()){ // So check that the block number is within the range of the disk image
+  else if(blockNum < disk.fileSize() / 532){ // So check that the block number is within the range of the disk image (Alex's v1.6 fix, 11/11/2026)
 #ifdef FUJINET_MAILBOX
     mbOnWrite(blockNum, blockData); // FujiNet mailbox experiment: a signed page is a request; the block is stored all the same
 #endif

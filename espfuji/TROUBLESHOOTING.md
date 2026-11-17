@@ -19,6 +19,14 @@ the network is Y: using the broadcast name") and joins anyway.
 **A page arrives short, or STATUS says "truncated".** 0.5.1 and earlier cut bodies at the first read; 0.5.2 reads to
 Content-Length. If it still happens, the server closed early; TRACE shows the last fetch.
 
+**HTTPS pages fail with "ERROR connection refused" after the drive has been in use a while.** Firmware 1.1 and
+earlier ran short of memory for TLS after many fetches (November 2026); 1.1.1 fixes it, so update the firmware. On 1.1.1
+the error text names the cause: "ERROR tls handshake timed out (N ms)" is a slow network or server (try again, or a
+better signal); "(tls -1 ... Generic error)" after "connection refused" is a one-off failure on the way, so try again.
+
+**The drive should join a different network in another place.** 1.1.1 takes up to four: `ssid=`/`password=`, then
+`ssid2=`/`password2=` up to `ssid4=`. It joins the first listed one it can see; WIFI shows which ("net 2/3").
+
 **CLOCK answers UTC.** Add `timezone=` to espfuji.ini (0.5.3) with a POSIX TZ string such as `EST5EDT,M3.2.0,M11.1.0`
 (US Eastern) or `GMT0BST,M3.5.0/1,M10.5.0` (UK). CLOCK answers "ERROR no time yet (SNTP waiting)" for the first
 minute after power-up.

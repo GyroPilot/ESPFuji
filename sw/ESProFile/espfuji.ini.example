@@ -2,6 +2,9 @@
 # The drive reads it once at power-up.  The password is never stored in the ESP32's flash.
 ssid=YourNetworkName
 password=YourPassword
+# 1.1.1: up to three more networks, tried in this order when the first is not in range (home, hotspot, travel router)
+# ssid2=YourPhoneHotspot
+# password2=ItsPassword
 hostname=espfuji
 # 0.5.3: your time zone as a POSIX TZ string, so CLOCK answers local time (the FujiNet does the same).
 # Cincinnati (US Eastern): timezone=EST5EDT,M3.2.0,M11.1.0    Central: CST6CDT,M3.2.0,M11.1.0
