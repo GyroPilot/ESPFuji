@@ -87,18 +87,26 @@
     <li>Click <strong>Install ESPFuji 1.1.1</strong> above.</li>
     <li>A list of ports appears. Pick the one that appeared when you plugged the cable in (often named
       <em>CP210x</em>, <em>USB Serial</em> or <em>usbserial</em>) and click <strong>Connect</strong>.</li>
-    <li>Click <strong>Install</strong> and wait until it says the installation is complete. Do not unplug the cable
-      while it is writing.</li>
+    <li>Click <strong>Install</strong>. The installer then asks you to confirm and says <em>"All data on the device
+      will be erased"</em>: that means the ESP32's own firmware only. The SD card, your disk image and
+      <code>espfuji.ini</code> are not touched. Click <strong>Install</strong> again and wait until it says the
+      installation is complete (about two minutes). Do not unplug the cable while it is writing.</li>
     <li>Unplug the USB cable, put the SD card back if you took it out, and start the Lisa. Your Lisa programs work as
       before; ESPFuji's HELLO now answers <code>ESPFuji 1.1.1</code>.</li>
   </ol>
 
   <h2>If something goes wrong</h2>
   <ul>
-    <li><strong>No port in the list:</strong> try another cable, or install the USB driver for the board's chip:
-      <a href="https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers">Silicon Labs CP210x</a>. Then reload this page.</li>
-    <li><strong>It stops or fails while connecting:</strong> unplug, plug in again and retry. Some older ESP32 boards
-      need the slower command-line method: use <code>flash_espfuji_release.py</code> from the release page.</li>
+    <li><strong>No port in the list:</strong> try another cable (some only charge), or install the USB driver for the
+      board's chip: <a href="https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers">Silicon Labs CP210x</a>.
+      Then reload this page. (Recent Macs need no driver: the port shows as <em>CP2102 USB to UART Bridge Controller
+      (cu.usbserial-…)</em>.)</li>
+    <li><strong>It fails partway</strong> (for example <em>"Invalid head of packet"</em>) <strong>or sits on
+      "Connecting":</strong> close the installer, unplug the USB cable, plug it back in and click Install again. A failed
+      try does no harm: the ESP32 simply needs the install run again before it will start. Plug the cable straight into
+      the computer, not into a hub, keyboard or monitor. On a Mac this sometimes takes a second try (tested 18 Nov 2026:
+      the second try passed). If it still fails, use the command-line method: <code>flash_espfuji_release.py</code> from
+      the release page.</li>
     <li><strong>Want a backup of the old firmware first?</strong> This page cannot make one. The command-line script
       can: <code>flash_espfuji_release.py backup</code>, and its <code>restore</code> puts Alex's original firmware
       back at any time.</li>
