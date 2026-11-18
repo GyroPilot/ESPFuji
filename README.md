@@ -5,6 +5,8 @@ The official ESProFile, Alex Anderson-McLeod's ESP32 ProFile and Widget emulator
 
 This fork adds **ESPFuji**: FujiNet-style networking for the Apple Lisa through an ESProFile (a mailbox firmware, a Lisa Office System tool, a flasher), in the [`espfuji/`](espfuji/) folder and on this repository's Releases page. Alex has approved of this being published, but he does not support the ESPFuji firmware in any way: the mailbox code, the Lisa tools and the flasher are Tim O'Connor's, and questions or bugs about them go to this repository's Issues, never to Alex. The ESProFile boards and the stock emulator firmware remain Alex's work and his to support. Everything below this notice is Alex's README as it stands upstream.
 
+**Install or update ESPFuji from your web browser, no command line:** **https://gyropilot.github.io/ESPFuji/** (Chrome or Edge on a computer; for an ESP32 that already works in an ESProFile). The command-line script with backup and restore is on the [Releases page](https://github.com/GyroPilot/ESPFuji/releases/latest).
+
 ---
 
 # ESProFile
