@@ -72,6 +72,11 @@
     <li>A USB cable that carries data (some phone cables only charge).</li>
     <li>The ESProFile's ESP32 board, either the external ESProFile or the internal one inside the Lisa.</li>
   </ul>
+  <p class="note"><strong>For an ESP32 that already works in an ESProFile</strong> (updating from Alex's firmware or an
+    older ESPFuji). A <strong>brand-new</strong> ESP32 first needs Alex's one-time flash-voltage step
+    (<code>espefuse set_flash_voltage 3.3V</code>, in the
+    <a href="https://github.com/alexthecat123/ESProFile">ESProFile README</a>), which a web page cannot do. Without
+    it the board will not start on the ESProFile.</p>
   <p class="note"><strong>Turn the Lisa (or Mac XL) OFF first.</strong> The USB cable alone powers the ESP32 while
     it is being updated. The Lisa must not be powering it at the same time.</p>
 
