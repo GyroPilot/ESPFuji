@@ -123,7 +123,32 @@
     <p>Release notes, the command-line script and checksums:
       <a href="https://github.com/GyroPilot/ESPFuji/releases/tag/v1.1.1">ESPFuji 1.1.1 on GitHub</a>.
       This page uses <a href="https://esphome.github.io/esp-web-tools/">ESP Web Tools</a>.</p>
+    <p>This page counts visits and installs with <a href="https://www.goatcounter.com/">GoatCounter</a>: no cookies,
+      no personal data.</p>
   </footer>
 </main>
+<script data-goatcounter="https://espfuji.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
+<script>
+  // Count installs, not just visits: ESP Web Tools keeps its progress in the dialog's _installState
+  // (10.4.0: preparing, erasing, writing, finished, error). One event of each kind per installer window.
+  (function () {
+    var sent = {};
+    function ev(name) {
+      if (sent[name]) return;
+      if (!(window.goatcounter && window.goatcounter.count)) return; // script not loaded yet (or blocked): try again
+      sent[name] = 1;
+      window.goatcounter.count({ path: name, title: name, event: true });
+    }
+    setInterval(function () {
+      var d = document.querySelector("ewt-install-dialog");
+      if (!d) { sent = {}; return; }
+      ev("installer-opened");
+      var s = d._installState && d._installState.state;
+      if (s === "erasing" || s === "writing") ev("install-started");
+      else if (s === "finished") ev("install-finished");
+      else if (s === "error") ev("install-failed");
+    }, 500);
+  })();
+</script>
 </body>
 </html>
