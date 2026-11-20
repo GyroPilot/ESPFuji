@@ -48,10 +48,15 @@
 #endif
 // WiFi.h, WiFiClientSecure.h and HTTPClient.h are included at the top of ESProFile.ino (before the emulator defines).
 
-#define ESPFUJI_VERSION "ESPFuji 1.1.2t5"
+#define ESPFUJI_VERSION "ESPFuji 1.1.2t6"
 #define MB_NET_CORE   0                                // Wi-Fi's core; the interface owns core 1 with interrupts off
 #define MB_BODY_MAX   32768                            // the largest page body kept (a Lisa picture is 13 KB)
 #define MB_JOIN_MS    8000                             // how long mbSetup waits for the first Wi-Fi join
+#define MB_WIFI_DEFER_MS 60000                         // 1.1.2t6: radio quiet this long after power-up (or until a request)
+// 1.1.2t6: why the chip started, the last 8 times; survives a reset (not a power-off). BOOTS reports it.
+RTC_NOINIT_ATTR static uint32_t rtcMagic;
+RTC_NOINIT_ATTR static uint8_t  rtcWhy[8];
+RTC_NOINIT_ATTR static uint32_t rtcBoots;
 #define MB_NETS       4                                // 1.1.1: networks espfuji.ini may list (ssid=, ssid2= ... ssid4=)
 #ifndef MB_STACK
 #define MB_STACK      12288                            // the net task's stack in bytes (0.3: 12288)
@@ -396,6 +401,10 @@ static void mbServe(const uint8_t *req, uint16_t len, uint8_t *out, uint16_t *ou
         snprintf(txt, sizeof txt, "%s up %lus %s %s req %lu heap %luk/%luk", ESPFUJI_VERSION,   // fits a Lisa line
                  (unsigned long)(millis() / 1000), mbWifiWord(), WiFi.localIP().toString().c_str(),
                  (unsigned long)mbRequests, (unsigned long)(ESP.getFreeHeap() / 1024), (unsigned long)(ESP.getMinFreeHeap() / 1024));
+    } else if (strcmp(cmd, "BOOTS") == 0) {        // 1.1.2t6: reset reasons, newest first (1 power-on, 9 brownout, 4 panic)
+        snprintf(txt, sizeof txt, "boots %lu; why %u %u %u %u %u %u %u %u; up %lus", (unsigned long)rtcBoots,
+                 rtcWhy[0], rtcWhy[1], rtcWhy[2], rtcWhy[3], rtcWhy[4], rtcWhy[5], rtcWhy[6], rtcWhy[7],
+                 (unsigned long)(millis() / 1000));
     } else if (strcmp(cmd, "STATUS") == 0) {
         snprintf(txt, sizeof txt, "requests %lu replies %lu served %lu body %lu open %d",
                  (unsigned long)mbRequests, (unsigned long)mbReplies, (unsigned long)mbServed,
@@ -578,13 +587,24 @@ static void mbSerialPoll(void) {
 static void mbTask(void *arg) {
     uint32_t lastJoin = 0;
     bool saidOn = false;
-    if (mbCfg.have) {                                  // 1.1.2: the first scan and join, here instead of in mbSetup
-        mbFixSsidCase();                               // "Wifi" in the file, "WiFi" on the air: take the name as broadcast
-        int r = WiFi.begin(mbCfg.ssid, mbCfg.pass);
-        mbLog("ESPFuji: joining %s (begin %d, status %s); the disk is already being served\n", mbCfg.ssid, r, mbWifiWord());
-        lastJoin = millis();
-    }
+    bool started = !mbCfg.have;                        // 1.1.2t6: Wi-Fi not started yet
     for (;;) {
+        // 1.1.2t6: the radio stays quiet while the Lisa boots. The first scan and join wait until MB_WIFI_DEFER_MS
+        // after power-up, or the first request (a Lisa program or the USB port), whichever comes first. With the
+        // scan running during the boot reads, a 2/10 powering its internal ESProFile failed to boot (10726) on
+        // 20 Nov: a scan's transmit bursts draw ~250 mA from the Lisa's supply right when the parallel port is busiest.
+        if (!started && (millis() > MB_WIFI_DEFER_MS || mbReq.pending)) {
+            mbFixSsidCase();                           // "Wifi" in the file, "WiFi" on the air: take the name as broadcast
+            int r = WiFi.begin(mbCfg.ssid, mbCfg.pass);
+            mbLog("ESPFuji: joining %s at %lu s (begin %d, %s)\n", mbCfg.ssid, (unsigned long)(millis() / 1000), r,
+                  mbReq.pending ? "first request" : "boot quiet time over");
+            lastJoin = millis();
+            started = true;
+            if (mbReq.pending) {                       // a request is waiting: give the join up to 10 s to land
+                uint32_t t0 = millis();
+                while (!mbHaveIp() && millis() - t0 < 10000) delay(100);
+            }
+        }
         if (!saidOn && mbHaveIp()) {                   // 1.1.2: the "on ... as ..." line, whenever the first join lands
             mbLog("ESPFuji: on %s as %s\n", mbCfg.ssid, WiFi.localIP().toString().c_str());
             saidOn = true;
@@ -592,7 +612,7 @@ static void mbTask(void *arg) {
 #ifndef ESPFUJI_BENCH
         mbSerialPoll();
 #endif
-        if (mbCfg.have && WiFi.status() != WL_CONNECTED && millis() - lastJoin > 15000) {
+        if (started && mbCfg.have && WiFi.status() != WL_CONNECTED && millis() - lastJoin > 15000) {
             static int tries = 0;
             if (++tries % 4 == 0) {                    // every fourth try: the boot-time scan can miss (seen right
                 WiFi.disconnect();                     // after a flash), so look the name up again and start over
@@ -614,7 +634,7 @@ static void mbTask(void *arg) {
         static uint32_t noIpSince = 0;
         bool noIp = WiFi.status() == WL_CONNECTED && (uint32_t)WiFi.localIP() == 0;
         if (!noIp) noIpSince = millis();
-        if (mbCfg.have && (mbRejoinAsk || millis() - noIpSince > 20000) && millis() - lastJoin > 15000) {
+        if (started && mbCfg.have && (mbRejoinAsk || millis() - noIpSince > 20000) && millis() - lastJoin > 15000) {
             mbRejoinAsk = false;
             noIpSince = millis();
             WiFi.disconnect();
@@ -677,6 +697,12 @@ void mbSetup() {
                                     "task watchdog", "other watchdog", "deep sleep", "BROWNOUT", "SDIO"};
         int r = (int)esp_reset_reason();
         Serial.printf("%s: started by %s\n", ESPFUJI_VERSION, r >= 0 && r < 11 ? why[r] : "?");
+        if (rtcMagic != 0xE5F0112u || r == ESP_RST_POWERON) {
+            rtcMagic = 0xE5F0112u; rtcBoots = 0; memset(rtcWhy, 0, sizeof rtcWhy);
+        }
+        memmove(rtcWhy + 1, rtcWhy, sizeof rtcWhy - 1);
+        rtcWhy[0] = (uint8_t)r;
+        rtcBoots++;
     }
     mbReq.pending = false;
     mbRep.ready = false;
