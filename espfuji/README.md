@@ -106,6 +106,8 @@ the raw `.image` the ESProFile uses, both ways.
   Macintosh XL); a READ at offset 0 echoes 0; the page body read every time round. The Mac XL applications 1.1 were
   tested with these on a real Macintosh XL and a Lisa 2/10.
 - **1.1** (Releases, 8 Nov 2026): the 1.1b3 code with the version changed. Proven 12 Nov 2026 on a Lisa 2/10's internal ESProFile (a whole LisaCheckers game against the Macintosh XL over a travel hotspot) and on the Macintosh XL's internal ESProFile (HELLO 1.1, Wi-Fi at -46 dBm).
+- **1.1.2** (Releases, 20 Nov 2026): the disk is served at once at power-up (1.1.1 could make a Lisa that powers up
+  with its ESProFile fail to start from it); Wi-Fi joins a minute after power-up or at the first request.
 - **1.1.1** (Releases, 17 Nov 2026): the memory fix for "connection refused" on HTTPS after a while, plain TLS
   error messages, Alex's emulator 1.6 range fix, and up to four networks in espfuji.ini. See CHANGELOG.md.
 - 0.3: the first build proven on the Lisa 2/10 (25 Oct 2026).

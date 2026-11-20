@@ -2,6 +2,26 @@
 
 Firmware versions are what HELLO prints ("ESPFuji 0.5.3"). The Lisa-side test tool has its own numbers (ESPFuji 0.2 REV C).
 
+## 1.1.2 (20 November 2026): the disk is served at once
+- **A Lisa that powers up together with its ESProFile could fail to start from it** (error 10726 on a Lisa 2/10 on
+  20 Nov 2026; a restart without switching off then worked). The cause: 1.1.1 scanned for its Wi-Fi network (about 3 s)
+  and waited up to 8 s for the join BEFORE it began serving the disk, so for up to 11 seconds after "ESProFile is
+  ready!" the drive answered nothing. 1.1.2 serves the disk at once; the scan and the join run on the network side
+  while the disk works. On a bench (one ESProFile reading another through its start-up): first block answered 0.4 s
+  after "ready" instead of about 11 s; 95 reads, none failed.
+- **Wi-Fi starts 60 seconds after power-up, or as soon as a program asks for the network**, whichever comes first, so
+  the radio is quiet while the Lisa starts. A program that asks in the first minute waits up to about 10 s for the join.
+- **The network side no longer freezes when none of the listed networks is in range.** A scan from the network task
+  never finished, because the Arduino core handled Wi-Fi events on the core the disk interface holds with interrupts
+  off; they are now handled on the network core (`-DARDUINO_EVENT_RUNNING_CORE=0` in build_opt.h). Seen in test
+  builds; 1.1.1 has the same code path at its fourth retry.
+- **Why it last started:** the serial console shows "ESPFuji 1.1.2: started by power-on" (or brownout, panic, ...),
+  and the new request BOOTS lists the last eight starts. The network side's messages (joining, "on ... as ...") now
+  appear on the serial console too.
+- Tested on a Lisa 2/10 (2 MB) with an internal ESProFile, powered by the Lisa: four cold starts, Wi-Fi joined, LisaFuji
+  fetched pages. **Not yet tried on a Macintosh XL, on a 1 MB Lisa, or on the ESP32-S3.**
+- Nothing changed for the Lisa or Mac tools: same mailbox, same requests, same answers. espfuji.ini is unchanged.
+
 ## 1.1.1 (17 November 2026): the memory fix
 - **"connection refused" after a while on HTTPS pages is fixed.** The cause: the TLS library needs one large free
   block of memory for every secure connection, and the plain ESP32 had too little to spare, because a 64 KB file-copy
