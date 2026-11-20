@@ -48,7 +48,7 @@
 #endif
 // WiFi.h, WiFiClientSecure.h and HTTPClient.h are included at the top of ESProFile.ino (before the emulator defines).
 
-#define ESPFUJI_VERSION "ESPFuji 1.1.1"
+#define ESPFUJI_VERSION "ESPFuji 1.1.2t4"
 #define MB_NET_CORE   0                                // Wi-Fi's core; the interface owns core 1 with interrupts off
 #define MB_BODY_MAX   32768                            // the largest page body kept (a Lisa picture is 13 KB)
 #define MB_JOIN_MS    8000                             // how long mbSetup waits for the first Wi-Fi join
@@ -459,11 +459,26 @@ static void mbServe(const uint8_t *req, uint16_t len, uint8_t *out, uint16_t *ou
 
 // SSIDs are case-sensitive and people type them from memory: scan once (about 3 s) and, when the configured name
 // matches a network only without regard to case, use the name as the network broadcasts it.
+// 1.1.2: messages from the network task. Serial.print must never run on that core (see mbSerialOut below: a line
+// longer than the 128-byte FIFO froze the task); this goes straight to the UART FIFO like the USB replies, so the
+// lines show in a serial console (and the installer's Logs & Console) whichever core prints them.
+static void mbSerialOut(const char *p, size_t n);
+static void mbLog(const char *fmt, ...) {
+    char b[200];
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(b, sizeof b, fmt, ap);
+    va_end(ap);
+    if (n > 0) mbSerialOut(b, n < (int)sizeof b ? (size_t)n : sizeof b - 1);
+}
+
 // 1.1.1: with several networks listed, the first in the ini's order that the scan shows is the one joined; the list
 // is walked again on every fourth retry, so a drive carried from one place to another finds its network without a
 // card change (home, a phone's hotspot, a travel router).
 static void mbFixSsidCase(void) {
+    mbLog("T3: scan start %lu ms\n", (unsigned long)millis());
     int n = WiFi.scanNetworks();
+    mbLog("T3: scan done n=%d %lu ms\n", n, (unsigned long)millis());
     int nets = mbBody ? mbNets->n : 1;
     int chosen = -1, found = -1;
     for (int k = 0; k < nets && chosen < 0; k++) {
@@ -482,19 +497,19 @@ static void mbFixSsidCase(void) {
         String airS = WiFi.SSID(found);
         const char *air = airS.c_str();
         if (strcmp(air, want) != 0)
-            Serial.printf("ESPFuji: espfuji.ini says %s, the network is %s: using the broadcast name\n", want, air);
+            mbLog("ESPFuji: espfuji.ini says %s, the network is %s: using the broadcast name\n", want, air);
         if (mbBody) {
             if (nets > 1 && (mbNets->cur != chosen || strcmp(mbCfg.ssid, air) != 0))
-                Serial.printf("ESPFuji: network %d of %d, %s (%d dBm)\n", chosen + 1, nets, air, (int)WiFi.RSSI(found));
+                mbLog("ESPFuji: network %d of %d, %s (%d dBm)\n", chosen + 1, nets, air, (int)WiFi.RSSI(found));
             mbNets->cur = chosen;
             strlcpy(mbCfg.pass, mbNets->net[chosen].pass, sizeof mbCfg.pass);
         }
         strlcpy(mbCfg.ssid, air, sizeof mbCfg.ssid);
     } else if (n >= 0) {
         if (nets > 1)
-            Serial.printf("ESPFuji: none of the %d listed networks seen in a scan of %d (2.4 GHz only; hidden networks do not show); trying %s\n", nets, n, mbCfg.ssid);
+            mbLog("ESPFuji: none of the %d listed networks seen in a scan of %d (2.4 GHz only; hidden networks do not show); trying %s\n", nets, n, mbCfg.ssid);
         else
-            Serial.printf("ESPFuji: %s not seen in a scan of %d networks (2.4 GHz only; hidden networks do not show)\n", mbCfg.ssid, n);
+            mbLog("ESPFuji: %s not seen in a scan of %d networks (2.4 GHz only; hidden networks do not show)\n", mbCfg.ssid, n);
     }
     WiFi.scanDelete();
 }
@@ -564,7 +579,19 @@ static void mbSerialPoll(void) {
 
 static void mbTask(void *arg) {
     uint32_t lastJoin = 0;
+    bool saidOn = false;
+    mbLog("T3: task start %lu ms\n", (unsigned long)millis());
+    if (mbCfg.have) {                                  // 1.1.2: the first scan and join, here instead of in mbSetup
+        mbFixSsidCase();                               // "Wifi" in the file, "WiFi" on the air: take the name as broadcast
+        int r = WiFi.begin(mbCfg.ssid, mbCfg.pass);
+        mbLog("ESPFuji: joining %s (begin %d, status %s); the disk is already being served\n", mbCfg.ssid, r, mbWifiWord());
+        lastJoin = millis();
+    }
     for (;;) {
+        if (!saidOn && mbHaveIp()) {                   // 1.1.2: the "on ... as ..." line, whenever the first join lands
+            mbLog("ESPFuji: on %s as %s\n", mbCfg.ssid, WiFi.localIP().toString().c_str());
+            saidOn = true;
+        }
 #ifndef ESPFUJI_BENCH
         mbSerialPoll();
 #endif
@@ -661,14 +688,10 @@ void mbSetup() {
                                                        // the access point minutes into a soak while still saying
                                                        // "connected" (pings dead, fetches stalled); ~80 mA more.
         if (mbCfg.host[0]) WiFi.setHostname(mbCfg.host);
-        mbFixSsidCase();                               // "Wifi" in the file, "WiFi" on the air: take the name as broadcast
-        WiFi.begin(mbCfg.ssid, mbCfg.pass);
-        uint32_t t0 = millis();
-        while (WiFi.status() != WL_CONNECTED && millis() - t0 < MB_JOIN_MS) delay(100);
-        if (WiFi.status() == WL_CONNECTED)
-            Serial.printf("ESPFuji: on %s as %s\n", mbCfg.ssid, WiFi.localIP().toString().c_str());
-        else
-            Serial.printf("ESPFuji: %s not joined yet (%s); keeps trying\n", mbCfg.ssid, mbWifiWord());
+        // 1.1.2: NO scan and NO join wait here. Both used to run before the disk was served: about 3 s of scan
+        // plus up to MB_JOIN_MS, so for up to 11 s after "ESProFile is ready!" the drive answered nothing (bench
+        // 20 Nov 2026). A Lisa powered up together with its ESProFile then failed to boot (10726, or 85 when the
+        // ROM gave up). The network task does the scan and the first join, on the other core, while the disk runs.
     } else {
         Serial.println("ESPFuji: no espfuji.ini on the SD card: mailbox without network");
     }
