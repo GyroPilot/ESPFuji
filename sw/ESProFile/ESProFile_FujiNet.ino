@@ -48,7 +48,7 @@
 #endif
 // WiFi.h, WiFiClientSecure.h and HTTPClient.h are included at the top of ESProFile.ino (before the emulator defines).
 
-#define ESPFUJI_VERSION "ESPFuji 1.1.2t4"
+#define ESPFUJI_VERSION "ESPFuji 1.1.2t5"
 #define MB_NET_CORE   0                                // Wi-Fi's core; the interface owns core 1 with interrupts off
 #define MB_BODY_MAX   32768                            // the largest page body kept (a Lisa picture is 13 KB)
 #define MB_JOIN_MS    8000                             // how long mbSetup waits for the first Wi-Fi join
@@ -476,9 +476,7 @@ static void mbLog(const char *fmt, ...) {
 // is walked again on every fourth retry, so a drive carried from one place to another finds its network without a
 // card change (home, a phone's hotspot, a travel router).
 static void mbFixSsidCase(void) {
-    mbLog("T3: scan start %lu ms\n", (unsigned long)millis());
     int n = WiFi.scanNetworks();
-    mbLog("T3: scan done n=%d %lu ms\n", n, (unsigned long)millis());
     int nets = mbBody ? mbNets->n : 1;
     int chosen = -1, found = -1;
     for (int k = 0; k < nets && chosen < 0; k++) {
@@ -580,7 +578,6 @@ static void mbSerialPoll(void) {
 static void mbTask(void *arg) {
     uint32_t lastJoin = 0;
     bool saidOn = false;
-    mbLog("T3: task start %lu ms\n", (unsigned long)millis());
     if (mbCfg.have) {                                  // 1.1.2: the first scan and join, here instead of in mbSetup
         mbFixSsidCase();                               // "Wifi" in the file, "WiFi" on the air: take the name as broadcast
         int r = WiFi.begin(mbCfg.ssid, mbCfg.pass);
@@ -675,6 +672,12 @@ static void mbTask(void *arg) {
 
 // From emulatorSetup(), BEFORE the interface core turns interrupts off (and from the bench).
 void mbSetup() {
+    {                                                  // 1.1.2: why the chip last started (a power dip shows as BROWNOUT)
+        static const char *why[] = {"unknown", "power-on", "external pin", "software", "panic", "interrupt watchdog",
+                                    "task watchdog", "other watchdog", "deep sleep", "BROWNOUT", "SDIO"};
+        int r = (int)esp_reset_reason();
+        Serial.printf("%s: started by %s\n", ESPFUJI_VERSION, r >= 0 && r < 11 ? why[r] : "?");
+    }
     mbReq.pending = false;
     mbRep.ready = false;
     mbFileId = 0;
