@@ -67,10 +67,17 @@
     <p><a href="ESPFuji_Installer_Manual.pdf">Step-by-step manual with screenshots (PDF)</a></p>
   </div>
 
+  <p class="note"><strong>Use a good USB cable. This matters more than anything else on this page.</strong> The installer
+    sends four megabytes over the cable, and a worn, very long or charge-only cable can drop data partway through. The
+    install then stops, or the ESP32 is left half-written and will not start, and the Lisa cannot see the ESProFile.
+    Use a <strong>short cable that you know carries data</strong> (one you have used to copy files, not just to
+    charge), and plug it <strong>straight into the computer</strong>: no hubs, extension cables, keyboard or monitor
+    ports. If anything goes wrong, change the cable first, then run the install again.</p>
+
   <h2>Before you start</h2>
   <ul>
     <li>A computer with <strong>Chrome</strong> or <strong>Edge</strong>.</li>
-    <li>A USB cable that carries data (some phone cables only charge).</li>
+    <li>A <strong>good, short USB data cable</strong> (see above; some phone cables only charge).</li>
     <li>The ESProFile's ESP32 board, either the external ESProFile or the internal one inside the Lisa.</li>
   </ul>
   <p class="note"><strong>For an ESP32 that already works in an ESProFile</strong> (updating from Alex's firmware or an
@@ -108,6 +115,10 @@
       the computer, not into a hub, keyboard or monitor. On a Mac this sometimes takes a second try (tested 18 Nov 2026:
       the second try passed). If it still fails, use the command-line method: <code>flash_espfuji_release.py</code> from
       the release page.</li>
+    <li><strong>The Lisa shows error 85 after the update</strong> (or the ESProFile's light stays off or red): the
+      ESProFile is not answering the Lisa. Usually the install did not finish. Turn the Lisa off, use a better cable
+      plugged straight into the computer, and run the install again until it says the installation is complete. Then
+      check that the SD card is pushed fully in; an external ESProFile should be powered up before the Lisa.</li>
     <li><strong>Want a backup of the old firmware first?</strong> This page cannot make one. The command-line script
       can: <code>flash_espfuji_release.py backup</code>, and its <code>restore</code> puts Alex's original firmware
       back at any time.</li>
