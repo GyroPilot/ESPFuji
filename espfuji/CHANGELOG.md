@@ -19,7 +19,8 @@ Firmware versions are what HELLO prints ("ESPFuji 0.5.3"). The Lisa-side test to
   and the new request BOOTS lists the last eight starts. The network side's messages (joining, "on ... as ...") now
   appear on the serial console too.
 - Tested on a Lisa 2/10 (2 MB) with an internal ESProFile, powered by the Lisa: four cold starts, Wi-Fi joined, LisaFuji
-  fetched pages. **Not yet tried on a Macintosh XL, on a 1 MB Lisa, or on the ESP32-S3.**
+  fetched pages. A Macintosh XL (internal ESProFile, updated with the web installer, 20 Nov 2026): starts from it,
+  HELLO answers 1.1.2, Wi-Fi joined; only a few starts so far. **Not yet tried on a 1 MB Lisa or on the ESP32-S3.**
 - Nothing changed for the Lisa or Mac tools: same mailbox, same requests, same answers. espfuji.ini is unchanged.
 
 ## 1.1.1 (17 November 2026): the memory fix
