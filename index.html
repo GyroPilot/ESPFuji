@@ -101,6 +101,9 @@
       installation is complete (about two minutes). Do not unplug the cable while it is writing.</li>
     <li>Unplug the USB cable, put the SD card back if you took it out, and start the Lisa. Your Lisa programs work as
       before; ESPFuji's HELLO now answers <code>ESPFuji 1.1.1</code>.</li>
+    <li><strong>The first start after an update may stop with an error</strong> (for example error 10726). We have
+      seen this once in testing: ESPFuji does some one-time setting up on its first start. Restart the Lisa once and
+      it starts normally from then on. A fix is being worked on.</li>
   </ol>
 
   <h2>If something goes wrong</h2>
@@ -115,6 +118,8 @@
       the computer, not into a hub, keyboard or monitor. On a Mac this sometimes takes a second try (tested 18 Nov 2026:
       the second try passed). If it still fails, use the command-line method: <code>flash_espfuji_release.py</code> from
       the release page.</li>
+    <li><strong>The first start after the update stops with an error</strong> (such as 10726) but the ESProFile's
+      light is green: restart the Lisa once. See step 7 above.</li>
     <li><strong>The Lisa shows error 85 after the update</strong> (or the ESProFile's light stays off or red): the
       ESProFile is not answering the Lisa. Usually the install did not finish. Turn the Lisa off, use a better cable
       plugged straight into the computer, and run the install again until it says the installation is complete. Then
