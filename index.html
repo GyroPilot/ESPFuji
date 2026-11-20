@@ -49,11 +49,11 @@
 <body>
 <main>
   <h1>ESPFuji Installer</h1>
-  <p class="sub">Put ESPFuji 1.1.1 on an ESProFile from this page. No Python, no command line.</p>
+  <p class="sub">Put ESPFuji 1.1.2 on an ESProFile from this page. No Python, no command line.</p>
 
   <div class="card install">
     <esp-web-install-button manifest="manifest.json">
-      <button slot="activate">Install ESPFuji 1.1.1</button>
+      <button slot="activate">Install ESPFuji 1.1.2</button>
       <span slot="unsupported">
         <strong>This browser cannot talk to USB devices.</strong><br>
         Open this page in <strong>Chrome</strong> or <strong>Microsoft Edge</strong> on a Windows, Mac, Linux or
@@ -92,7 +92,7 @@
   <ol>
     <li>Turn the Lisa off.</li>
     <li>Plug the USB cable into the ESP32 board on the ESProFile and into the computer.</li>
-    <li>Click <strong>Install ESPFuji 1.1.1</strong> above.</li>
+    <li>Click <strong>Install ESPFuji 1.1.2</strong> above.</li>
     <li>A list of ports appears. Pick the one that appeared when you plugged the cable in (often named
       <em>CP210x</em>, <em>USB Serial</em> or <em>usbserial</em>) and click <strong>Connect</strong>.</li>
     <li>Click <strong>Install</strong>. The installer then asks you to confirm and says <em>"All data on the device
@@ -100,10 +100,8 @@
       <code>espfuji.ini</code> are not touched. Click <strong>Install</strong> again and wait until it says the
       installation is complete (about two minutes). Do not unplug the cable while it is writing.</li>
     <li>Unplug the USB cable, put the SD card back if you took it out, and start the Lisa. Your Lisa programs work as
-      before; ESPFuji's HELLO now answers <code>ESPFuji 1.1.1</code>.</li>
-    <li><strong>The first start after an update may stop with an error</strong> (for example error 10726). We have
-      seen this once in testing: ESPFuji does some one-time setting up on its first start. Restart the Lisa once and
-      it starts normally from then on. A fix is being worked on.</li>
+      before; ESPFuji's HELLO now answers <code>ESPFuji 1.1.2</code>. Wi-Fi joins about a minute after power-up, or as soon as
+      a Lisa program asks for the network.</li>
   </ol>
 
   <h2>If something goes wrong</h2>
@@ -118,8 +116,15 @@
       the computer, not into a hub, keyboard or monitor. On a Mac this sometimes takes a second try (tested 18 Nov 2026:
       the second try passed). If it still fails, use the command-line method: <code>flash_espfuji_release.py</code> from
       the release page.</li>
-    <li><strong>The first start after the update stops with an error</strong> (such as 10726) but the ESProFile's
-      light is green: restart the Lisa once. See step 7 above.</li>
+    <li><strong>The list of ports closes before you can pick one, or the port is "in use":</strong> close every other
+      tab that has this installer open (and any serial monitor), then click Install again.</li>
+    <li><strong>Still stuck on "Connecting"?</strong> Put the ESP32 into update mode by hand: it has two small buttons
+      beside its USB socket, <em>BOOT</em> and <em>EN</em> (or <em>RST</em>). While the installer shows "Connecting",
+      hold BOOT, tap EN, then let go of BOOT.</li>
+    <li><strong>The Lisa does not start from the ESProFile after an update</strong> (error 10726 or 85) although the
+      ESProFile's light is green: restart the Lisa once. ESPFuji 1.1.1 could miss the Lisa's first reads after
+      power-up; 1.1.2 (20 Nov 2026) serves the disk at once. If you still see it on 1.1.2, please report it on the
+      Issues page.</li>
     <li><strong>The Lisa shows error 85 after the update</strong> (or the ESProFile's light stays off or red): the
       ESProFile is not answering the Lisa. Usually the install did not finish. Turn the Lisa off, use a better cable
       plugged straight into the computer, and run the install again until it says the installation is complete. Then
@@ -137,7 +142,7 @@
       The ESProFile boards and the stock firmware are
       <a href="https://github.com/alexthecat123/ESProFile">Alex's</a>.</p>
     <p>Release notes, the command-line script and checksums:
-      <a href="https://github.com/GyroPilot/ESPFuji/releases/tag/v1.1.1">ESPFuji 1.1.1 on GitHub</a>.
+      <a href="https://github.com/GyroPilot/ESPFuji/releases/tag/v1.1.2">ESPFuji 1.1.2 on GitHub</a>.
       This page uses <a href="https://esphome.github.io/esp-web-tools/">ESP Web Tools</a>.</p>
     <p>This page counts visits and installs with <a href="https://www.goatcounter.com/">GoatCounter</a>: no cookies,
       no personal data.</p>
