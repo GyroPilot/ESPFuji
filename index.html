@@ -4,22 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ESPFuji Installer</title>
-<meta name="description" content="Put the ESPFuji firmware on an ESProFile from your web browser: no command line.">
-<script type="module" src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"></script>
+<meta name="description" content="ESPFuji is temporarily withdrawn while a bug is confirmed.">
 <style>
   :root {
     --bg: #fbfaf7; --fg: #1d1d1b; --muted: #5d5b55; --card: #ffffff; --line: #dedbd3;
-    --accent: #2f5d8a; --accent-fg: #ffffff; --warn-bg: #fff6e0; --warn-line: #e3c56f; --ok: #2e6b3a;
+    --accent: #2f5d8a; --warn-bg: #fff6e0; --warn-line: #e3c56f;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       --bg: #191917; --fg: #ecebe6; --muted: #a9a69d; --card: #23231f; --line: #3a3934;
-      --accent: #7fb0e0; --accent-fg: #10161c; --warn-bg: #2d2717; --warn-line: #7a6326; --ok: #7cc48a;
+      --accent: #7fb0e0; --warn-bg: #2d2717; --warn-line: #7a6326;
     }
   }
   :root[data-theme="dark"] {
     --bg: #191917; --fg: #ecebe6; --muted: #a9a69d; --card: #23231f; --line: #3a3934;
-    --accent: #7fb0e0; --accent-fg: #10161c; --warn-bg: #2d2717; --warn-line: #7a6326; --ok: #7cc48a;
+    --accent: #7fb0e0; --warn-bg: #2d2717; --warn-line: #7a6326;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--fg);
@@ -28,19 +27,9 @@
   h1 { font-size: 1.9rem; margin: 0 0 4px; letter-spacing: -0.01em; }
   h2 { font-size: 1.2rem; margin: 36px 0 10px; }
   .sub { color: var(--muted); margin: 0 0 24px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 20px 22px; }
-  .install { text-align: center; padding: 28px 22px; }
-  .install p { margin: 10px 0 0; color: var(--muted); font-size: 0.95rem; }
-  esp-web-install-button button[slot="activate"] {
-    font-family: inherit; font-size: 1.15rem; font-weight: 600; line-height: 1; padding: 15px 30px; border: 0; border-radius: 8px;
-    background: var(--accent); color: var(--accent-fg); cursor: pointer;
-  }
-  esp-web-install-button button[slot="activate"]:focus-visible { outline: 3px solid var(--fg); outline-offset: 3px; }
-  .note { background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 8px; padding: 12px 16px; }
-  ol, ul { padding-left: 1.3rem; }
+  .note { background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 8px; padding: 14px 18px; }
+  ul { padding-left: 1.3rem; }
   li { margin: 6px 0; }
-  code { font-family: ui-monospace, Consolas, Menlo, monospace; font-size: 0.92em;
-         background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; overflow-wrap: anywhere; }
   a { color: var(--accent); }
   .small { font-size: 0.9rem; color: var(--muted); }
   footer { margin-top: 44px; border-top: 1px solid var(--line); padding-top: 16px; }
@@ -49,127 +38,38 @@
 <body>
 <main>
   <h1>ESPFuji Installer</h1>
-  <p class="sub">Put ESPFuji 1.1.2 on an ESProFile from this page. No Python, no command line.</p>
+  <p class="sub">Temporarily withdrawn, 21 November 2026</p>
 
-  <div class="card install">
-    <esp-web-install-button manifest="manifest.json">
-      <button slot="activate">Install ESPFuji 1.1.2</button>
-      <span slot="unsupported">
-        <strong>This browser cannot talk to USB devices.</strong><br>
-        Open this page in <strong>Chrome</strong> or <strong>Microsoft Edge</strong> on a Windows, Mac, Linux or
-        ChromeOS computer. Safari, Firefox and phones cannot do it.
-      </span>
-      <span slot="not-allowed">
-        <strong>This page must be opened over https.</strong> Use the link from the ESPFuji repository.
-      </span>
-    </esp-web-install-button>
-    <p>Takes about one to two minutes. Your disk image and <code>espfuji.ini</code> on the SD card are not touched.</p>
-    <p><a href="ESPFuji_Installer_Manual.pdf">Step-by-step manual with screenshots (PDF)</a></p>
-  </div>
+  <p class="note"><strong>ESPFuji has been taken down while we confirm a bug.</strong> The installer is switched off
+    until a fixed version is ready.</p>
 
-  <p class="note"><strong>Use a good USB cable. This matters more than anything else on this page.</strong> The installer
-    sends four megabytes over the cable, and a worn, very long or charge-only cable can drop data partway through. The
-    install then stops, or the ESP32 is left half-written and will not start, and the Lisa cannot see the ESProFile.
-    Use a <strong>short cable that you know carries data</strong> (one you have used to copy files, not just to
-    charge), and plug it <strong>straight into the computer</strong>: no hubs, extension cables, keyboard or monitor
-    ports. If anything goes wrong, change the cable first, then run the install again.</p>
+  <h2>What we found</h2>
+  <p>While ESPFuji's Wi-Fi is connecting, or retrying a network it cannot reach, the ESProFile can occasionally store a
+    block written by the Lisa with one or a few bytes missing. The Lisa is not told, so the damage shows up later. On one
+    Lisa 2/10 it made the startup disk unusable ("You have no environments on the startup disk").</p>
+  <p>We reproduced it on a test bench with ESPFuji 1.1.1 and 1.1.2. The same test with Alex's emulator code and no Wi-Fi
+    showed no damage in about 63,000 writes. Earlier ESPFuji versions have not been tested yet.</p>
 
-  <h2>Before you start</h2>
+  <h2>What to do</h2>
   <ul>
-    <li>A computer with <strong>Chrome</strong> or <strong>Edge</strong>.</li>
-    <li>A <strong>good, short USB data cable</strong> (see above; some phone cables only charge).</li>
-    <li>The ESProFile's ESP32 board, either the external ESProFile or the internal one inside the Lisa.</li>
+    <li><strong>Back up your SD card</strong> (copy the disk image to a computer).</li>
+    <li>For any disk you care about, go back to <strong>Alex's stock ESProFile firmware</strong>
+      (<a href="https://github.com/alexthecat123/ESProFile">ESProFile repository</a>) until a fixed ESPFuji is out.</li>
+    <li>If you keep using ESPFuji meanwhile, keep backups and avoid writing important work to that disk.</li>
   </ul>
-  <p class="note"><strong>For an ESP32 that already works in an ESProFile</strong> (updating from Alex's firmware or an
-    older ESPFuji). A <strong>brand-new</strong> ESP32 first needs Alex's one-time flash-voltage step
-    (<code>espefuse set_flash_voltage 3.3V</code>, in the
-    <a href="https://github.com/alexthecat123/ESProFile">ESProFile README</a>), which a web page cannot do. Without
-    it the board will not start on the ESProFile.</p>
-  <p class="note"><strong>Turn the Lisa (or Mac XL) OFF first.</strong> The USB cable alone powers the ESP32 while
-    it is being updated. The Lisa must not be powering it at the same time.</p>
-
-  <h2>Steps</h2>
-  <ol>
-    <li>Turn the Lisa off.</li>
-    <li>Plug the USB cable into the ESP32 board on the ESProFile and into the computer.</li>
-    <li>Click <strong>Install ESPFuji 1.1.2</strong> above.</li>
-    <li>A list of ports appears. Pick the one that appeared when you plugged the cable in (often named
-      <em>CP210x</em>, <em>USB Serial</em> or <em>usbserial</em>) and click <strong>Connect</strong>.</li>
-    <li>Click <strong>Install</strong>. The installer then asks you to confirm and says <em>"All data on the device
-      will be erased"</em>: that means the ESP32's own firmware only. The SD card, your disk image and
-      <code>espfuji.ini</code> are not touched. Click <strong>Install</strong> again and wait until it says the
-      installation is complete (about two minutes). Do not unplug the cable while it is writing.</li>
-    <li>Unplug the USB cable, put the SD card back if you took it out, and start the Lisa. Your Lisa programs work as
-      before; ESPFuji's HELLO now answers <code>ESPFuji 1.1.2</code>. Wi-Fi joins about a minute after power-up, or as soon as
-      a Lisa program asks for the network.</li>
-  </ol>
-
-  <h2>If something goes wrong</h2>
-  <ul>
-    <li><strong>No port in the list:</strong> try another cable (some only charge), or install the USB driver for the
-      board's chip: <a href="https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers">Silicon Labs CP210x</a>.
-      Then reload this page. (Recent Macs need no driver: the port shows as <em>CP2102 USB to UART Bridge Controller
-      (cu.usbserial-…)</em>.)</li>
-    <li><strong>It fails partway</strong> (for example <em>"Invalid head of packet"</em>) <strong>or sits on
-      "Connecting":</strong> close the installer, unplug the USB cable, plug it back in and click Install again. A failed
-      try does no harm: the ESP32 simply needs the install run again before it will start. Plug the cable straight into
-      the computer, not into a hub, keyboard or monitor. On a Mac this sometimes takes a second try (tested 18 Nov 2026:
-      the second try passed). If it still fails, use the command-line method: <code>flash_espfuji_release.py</code> from
-      the release page.</li>
-    <li><strong>The list of ports closes before you can pick one, or the port is "in use":</strong> close every other
-      tab that has this installer open (and any serial monitor), then click Install again.</li>
-    <li><strong>Still stuck on "Connecting"?</strong> Put the ESP32 into update mode by hand: it has two small buttons
-      beside its USB socket, <em>BOOT</em> and <em>EN</em> (or <em>RST</em>). While the installer shows "Connecting",
-      hold BOOT, tap EN, then let go of BOOT.</li>
-    <li><strong>The Lisa does not start from the ESProFile after an update</strong> (error 10726 or 85) although the
-      ESProFile's light is green: restart the Lisa once. ESPFuji 1.1.1 could miss the Lisa's first reads after
-      power-up; 1.1.2 (20 Nov 2026) serves the disk at once. If you still see it on 1.1.2, please report it on the
-      Issues page.</li>
-    <li><strong>The Lisa shows error 85 after the update</strong> (or the ESProFile's light stays off or red): the
-      ESProFile is not answering the Lisa. Usually the install did not finish. Turn the Lisa off, use a better cable
-      plugged straight into the computer, and run the install again until it says the installation is complete. Then
-      check that the SD card is pushed fully in; an external ESProFile should be powered up before the Lisa.</li>
-    <li><strong>Want a backup of the old firmware first?</strong> This page cannot make one. The command-line script
-      can: <code>flash_espfuji_release.py backup</code>, and its <code>restore</code> puts Alex's original firmware
-      back at any time.</li>
-    <li>The ESP32-S3 image is included but has not yet been tried on hardware.</li>
-  </ul>
+  <p>Updates will be posted here and on the
+    <a href="https://github.com/GyroPilot/ESPFuji/issues">ESPFuji Issues page</a>. Please report anything you have seen
+    there, never to Alex.</p>
 
   <footer class="small">
     <p><strong>ESPFuji</strong> is Tim O'Connor's fork of Alex Anderson-McLeod's ESProFile firmware. It is not the
-      official ESProFile firmware. Alex has approved of it being published but does not support it: ESPFuji questions
-      and bugs go to the <a href="https://github.com/GyroPilot/ESPFuji/issues">ESPFuji Issues page</a>, never to Alex.
-      The ESProFile boards and the stock firmware are
+      official ESProFile firmware, and this bug is not in Alex's firmware. Alex has approved of ESPFuji being published
+      but does not support it. The ESProFile boards and the stock firmware are
       <a href="https://github.com/alexthecat123/ESProFile">Alex's</a>.</p>
-    <p>Release notes, the command-line script and checksums:
-      <a href="https://github.com/GyroPilot/ESPFuji/releases/tag/v1.1.2">ESPFuji 1.1.2 on GitHub</a>.
-      This page uses <a href="https://esphome.github.io/esp-web-tools/">ESP Web Tools</a>.</p>
-    <p>This page counts visits and installs with <a href="https://www.goatcounter.com/">GoatCounter</a>: no cookies,
-      no personal data.</p>
+    <p>This page counts visits with <a href="https://www.goatcounter.com/">GoatCounter</a>: no cookies, no personal
+      data.</p>
   </footer>
 </main>
 <script data-goatcounter="https://espfuji.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
-<script>
-  // Count installs, not just visits: ESP Web Tools keeps its progress in the dialog's _installState
-  // (10.4.0: preparing, erasing, writing, finished, error). One event of each kind per installer window.
-  (function () {
-    var sent = {};
-    function ev(name) {
-      if (sent[name]) return;
-      if (!(window.goatcounter && window.goatcounter.count)) return; // script not loaded yet (or blocked): try again
-      sent[name] = 1;
-      window.goatcounter.count({ path: name, title: name, event: true });
-    }
-    setInterval(function () {
-      var d = document.querySelector("ewt-install-dialog");
-      if (!d) { sent = {}; return; }
-      ev("installer-opened");
-      var s = d._installState && d._installState.state;
-      if (s === "erasing" || s === "writing") ev("install-started");
-      else if (s === "finished") ev("install-finished");
-      else if (s === "error") ev("install-failed");
-    }, 500);
-  })();
-</script>
 </body>
 </html>
