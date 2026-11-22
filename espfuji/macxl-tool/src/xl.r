@@ -52,14 +52,14 @@ resource 'DITL' (129) { {
     { 156, 360, 176, 432 }, Button { enabled, "OK" };
     /* 0.1d6: two pieces; one dialog text holds 255 characters at most, and this one was cut off */
     { 10, 14, 108, 432 }, StaticText { disabled,
-        "ESPFuji XL 1.1d1 (22 November 2026, test)\r\r"
+        "ESPFuji XL 1.1 (23 November 2026)\r\r"
         "The ESPFuji network for a Macintosh XL running MacWorks: the ESProFile you boot from "
         "fetches pages and the time over Wi-Fi, through the file MAILBOX.DATA beside this application." };
     { 110, 14, 148, 432 }, StaticText { disabled,
         "Needs ESPFuji firmware 1.1b2 or later on the drive. By GyroPilot (Tim O'Connor), 2026." }
 } };
 
-resource 'vers' (1) { 0x01, 0x10, development, 0x01, verUS, "1.1d1", "1.1d1 (test), ESPFuji XL, Macintosh XL / MacWorks" };
+resource 'vers' (1) { 0x01, 0x10, release, 0x00, verUS, "1.1", "1.1, ESPFuji XL, Macintosh XL / MacWorks" };
 
 resource 'SIZE' (-1) {
     reserved, acceptSuspendResumeEvents, reserved, canBackground, doesActivateOnFGSwitch,

@@ -1,4 +1,4 @@
-/* ESPFuji XL: the ESPFuji network for a Macintosh XL (MacWorks), 0.1d7, 4 Nov 2026 (0.1d1 30 Oct; 0.1d2 the Finder icon; 0.1d3 the offset-0 READ echo;
+/* ESPFuji XL: the ESPFuji network for a Macintosh XL (MacWorks), 1.1, 23 Nov 2026 (Drive Status); 1.0 5 Nov; 0.1d7, 4 Nov 2026 (0.1d1 30 Oct; 0.1d2 the Finder icon; 0.1d3 the offset-0 READ echo;
  * 0.1d4 Command-period works, and the icon gets Alex's cat; 0.1d5 keys typed during a request are kept;
  * 0.1d6 the About box is no longer cut off, and Command-period also stops a page being drawn).
  *
@@ -457,7 +457,7 @@ static void Setup(void)
     gTE = TENew(&r, &r);
 
     CtoP(kNewsURL, gLastURL);
-    Say("ESPFuji XL 1.1d1 (test): the ESPFuji network for a Macintosh XL.");
+    Say("ESPFuji XL 1.1: the ESPFuji network for a Macintosh XL.");
     err = OpenMailbox();
     if (err) {
         sprintf(s, "MAILBOX.DATA could not be made beside this application (error %d). It needs 32 KB in one piece on the ESPFuji drive.", (int)err);
