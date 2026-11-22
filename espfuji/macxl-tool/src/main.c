@@ -26,7 +26,7 @@ pascal OSErr PBAllocContigTrap(ParmBlkPtr pb) M68K_INLINE(0xA210);
 enum { mApple = 128, mFile, mEdit, mNet };
 enum { iAbout = 1 };
 enum { iQuit = 1 };
-enum { iHello = 1, iWifi, iClock = 4, iOpen, iNews = 7, iClearWin = 9 };
+enum { iHello = 1, iWifi, iStatus, iClock = 5, iOpen, iNews = 8, iClearWin = 10 };   /* 1.1d1: Drive Status */
 
 #define kPages      64                           /* MAILBOX.DATA: 64 pages of 512 bytes, one contiguous run */
 #define kWaitTicks  (45L * 60)                   /* an OPEN may take the drive 30 s; give it 45 */
@@ -401,6 +401,7 @@ static void DoMenu(long mi)
         switch (item) {
         case iHello:    Simple("HELLO"); break;
         case iWifi:     Simple("WIFI"); break;
+        case iStatus:   Simple("STATUS"); break;   /* 1.1d1: the drive's request and disk counters (refused / odd) */
         case iClock:    SetClock(); break;
         case iOpen:     AskURL(); break;
         case iNews:     OpenPage(kNewsURL, true); break;
@@ -456,7 +457,7 @@ static void Setup(void)
     gTE = TENew(&r, &r);
 
     CtoP(kNewsURL, gLastURL);
-    Say("ESPFuji XL 1.0: the ESPFuji network for a Macintosh XL.");
+    Say("ESPFuji XL 1.1d1 (test): the ESPFuji network for a Macintosh XL.");
     err = OpenMailbox();
     if (err) {
         sprintf(s, "MAILBOX.DATA could not be made beside this application (error %d). It needs 32 KB in one piece on the ESPFuji drive.", (int)err);
