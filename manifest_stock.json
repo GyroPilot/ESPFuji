@@ -1,0 +1,12 @@
+{
+  "name": "ESProFile stock firmware",
+  "version": "emulator 1.6",
+  "new_install_prompt_erase": false,
+  "new_install_improv_wait_time": 0,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [{ "path": "firmware/ESProFile_stock_708cfc1_esp32.merged.bin", "offset": 0 }]
+    }
+  ]
+}
