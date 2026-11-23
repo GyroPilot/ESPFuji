@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ESPFuji Installer</title>
-<meta name="description" content="ESPFuji is temporarily withdrawn while a bug is fixed. This page can put Alex's stock ESProFile firmware back.">
+<meta name="description" content="Install ESPFuji 1.1.3 on an ESProFile from the browser. 1.1.3 fixes the write bug of 1.1.2 and earlier.">
 <script type="module" src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"></script>
 <style>
   :root {
@@ -56,17 +56,14 @@
 <body>
 <main>
   <h1>ESPFuji Installer</h1>
-  <p class="sub">ESPFuji is temporarily withdrawn. Page updated 21 November 2026.</p>
+  <p class="sub">Put ESPFuji 1.1.3 on an ESProFile from this page. No Python, no command line. Page updated 23 November 2026.</p>
 
-  <p class="note"><strong>ESPFuji has been taken down while a bug is fixed.</strong> The ESPFuji installer is switched
-    off until a fixed version is ready. Until then you can use this page to put Alex's stock ESProFile firmware back.</p>
-
-  <p class="info"><strong>Check back for updates.</strong> A fix is being worked on and tested on real Lisas. This page
-    will say when a fixed ESPFuji is ready to install, so please look here again before you install anything else.</p>
+  <p class="info"><strong>ESPFuji is back: 1.1.3 fixes the bug that took it down.</strong> If your ESProFile runs
+    ESPFuji 1.1.2 or earlier, please update. What was wrong and what changed is explained below.</p>
 
   <div class="card install">
-    <esp-web-install-button manifest="manifest_stock.json">
-      <button slot="activate">Install Alex's stock firmware</button>
+    <esp-web-install-button manifest="manifest.json" id="inst-espfuji">
+      <button slot="activate">Install ESPFuji 1.1.3</button>
       <span slot="unsupported">
         <strong>This browser cannot talk to USB devices.</strong><br>
         Open this page in <strong>Chrome</strong> or <strong>Microsoft Edge</strong> on a Windows, Mac, Linux or
@@ -76,9 +73,12 @@
         <strong>This page must be opened over https.</strong> Use the link from the ESPFuji repository.
       </span>
     </esp-web-install-button>
-    <p>Puts the ESProFile back to the firmware it came with (emulator 1.6). Takes about one to two minutes.
-      Your disk image on the SD card is not touched.</p>
+    <p>Takes about one to two minutes. Your disk image and <code>espfuji.ini</code> on the SD card are not touched.</p>
+    <p><a href="ESPFuji_Installer_Manual.pdf">Step-by-step manual with screenshots (PDF)</a></p>
   </div>
+
+  <p class="info"><strong>Check back for updates.</strong> This page always carries the newest ESPFuji. Look here again
+    before you install on another ESProFile, and when something does not behave as it should.</p>
 
   <div class="report">
     <a class="btn second" id="report" href="https://github.com/GyroPilot/ESPFuji/issues/new">Report a bug</a>
@@ -86,26 +86,27 @@
       which Lisa, and what you saw. ESPFuji reports go here, never to Alex.</p>
   </div>
 
-  <h2>What we found</h2>
-  <p>While ESPFuji's Wi-Fi is connecting, or retrying a network it cannot reach, the ESProFile can occasionally store a
-    block written by the Lisa with one or a few bytes missing. The Lisa is not told, so the damage shows up later. On one
-    Lisa 2/10 it made the startup disk unusable ("You have no environments on the startup disk").</p>
-  <p>We reproduced it on a test bench with ESPFuji 1.1.1 and 1.1.2. The same test with Alex's emulator code and no Wi-Fi
-    showed no damage in about 63,000 writes. Earlier ESPFuji versions have not been tested yet.</p>
+  <h2>What was wrong, and what 1.1.3 changes</h2>
+  <p>With ESPFuji 1.1.2 and earlier, the ESProFile could occasionally lose a byte of a block while its own Wi-Fi was
+    sending. A block written by the Lisa could then be stored a byte short, and the Lisa was not told, so the damage
+    showed up later. On one Lisa 2/10 it made the startup disk unusable ("You have no environments on the startup
+    disk"). This was a fault of ESPFuji, not of Alex's ESProFile firmware.</p>
+  <p>ESPFuji 1.1.3 keeps the network side of the ESP32 still for the length of every disk transfer, so the radio can
+    no longer disturb the disk. It also refuses a block that does not arrive complete, so the Lisa repeats the write
+    instead of the drive storing a damaged one. The drive now counts what it sees: in the ESPFuji tool on the Lisa,
+    <strong>S</strong> shows the counters ("refused" and "odd" should stay at 0).</p>
+  <p>Tested before release: more than 120,000 block transfers on a test bench with the radio busy, a Lisa 2/10 through
+    a working session with a network game and a restart, and a Macintosh XL through two half-hour tests that wrote
+    and compared every byte. No lost byte in any of them.</p>
 
-  <h2>What to do</h2>
+  <h2>If you used ESPFuji 1.1.2 or earlier</h2>
   <ul>
-    <li><strong>Back up your SD card</strong> (copy the disk image to a computer).</li>
-    <li>For any disk you care about, go back to <strong>Alex's stock ESProFile firmware</strong> with the button above
-      until a fixed ESPFuji is out.</li>
-    <li>If you keep using ESPFuji meanwhile, keep backups and avoid writing important work to that disk.</li>
+    <li><strong>Update to 1.1.3</strong> with the button above.</li>
+    <li>A disk that was written to under an older ESPFuji may hold a damaged block. If you have a backup of the disk
+      image from before, keep it. If the Lisa reports a damaged disk, repair it from the Office System 1 diskette or
+      go back to your backup.</li>
+    <li>From now on, <strong>back up your SD card</strong> now and then (copy the disk image to a computer).</li>
   </ul>
-
-  <h2>Going back to the stock firmware</h2>
-  <p>With the stock firmware the ESProFile is a disk for the Lisa exactly as Alex made it. The Lisa programs that use
-    the network through ESPFuji (LisaFuji, the Browser and the others) will not reach the network until ESPFuji is back.
-    Your disk image stays as it is, and <code>espfuji.ini</code> can stay on the SD card: the stock firmware ignores
-    it, and it will be there when you return to ESPFuji.</p>
 
   <p class="note"><strong>Use a good USB cable. This matters more than anything else on this page.</strong> The installer
     sends four megabytes over the cable, and a worn, very long or charge-only cable can drop data partway through. The
@@ -114,20 +115,34 @@
     charge), and plug it <strong>straight into the computer</strong>: no hubs, extension cables, keyboard or monitor
     ports. If anything goes wrong, change the cable first, then run the install again.</p>
 
+  <h2>Before you start</h2>
+  <ul>
+    <li>A computer with <strong>Chrome</strong> or <strong>Edge</strong>.</li>
+    <li>A <strong>good, short USB data cable</strong> (see above; some phone cables only charge).</li>
+    <li>The ESProFile's ESP32 board, either the external ESProFile or the internal one inside the Lisa.</li>
+  </ul>
+  <p class="note"><strong>For an ESP32 that already works in an ESProFile</strong> (updating from Alex's firmware or an
+    older ESPFuji). A <strong>brand-new</strong> ESP32 first needs Alex's one-time flash-voltage step
+    (<code>espefuse set_flash_voltage 3.3V</code>, in the
+    <a href="https://github.com/alexthecat123/ESProFile">ESProFile README</a>), which a web page cannot do. Without
+    it the board will not start on the ESProFile.</p>
   <p class="note"><strong>Turn the Lisa (or Mac XL) OFF first.</strong> The USB cable alone powers the ESP32 while
-    it is being written. The Lisa must not be powering it at the same time.</p>
+    it is being updated. The Lisa must not be powering it at the same time.</p>
 
+  <h2>Steps</h2>
   <ol>
     <li>Turn the Lisa off.</li>
     <li>Plug the USB cable into the ESP32 board on the ESProFile and into the computer.</li>
-    <li>Click <strong>Install Alex's stock firmware</strong> above.</li>
+    <li>Click <strong>Install ESPFuji 1.1.3</strong> above.</li>
     <li>A list of ports appears. Pick the one that appeared when you plugged the cable in (often named
       <em>CP210x</em>, <em>USB Serial</em> or <em>usbserial</em>) and click <strong>Connect</strong>.</li>
     <li>Click <strong>Install</strong>. The installer then asks you to confirm and says <em>"All data on the device
-      will be erased"</em>: that means the ESP32's own firmware only. The SD card and your disk image are not
-      touched. Click <strong>Install</strong> again and wait until it says the installation is complete (about two
-      minutes). Do not unplug the cable while it is writing.</li>
-    <li>Unplug the USB cable, put the SD card back if you took it out, and start the Lisa.</li>
+      will be erased"</em>: that means the ESP32's own firmware only. The SD card, your disk image and
+      <code>espfuji.ini</code> are not touched. Click <strong>Install</strong> again and wait until it says the
+      installation is complete (about two minutes). Do not unplug the cable while it is writing.</li>
+    <li>Unplug the USB cable, put the SD card back if you took it out, and start the Lisa. Your Lisa programs work as
+      before; ESPFuji's HELLO now answers <code>ESPFuji 1.1.3</code>. Wi-Fi joins about a minute after power-up, or as
+      soon as a Lisa program asks for the network.</li>
   </ol>
 
   <h2>If something goes wrong</h2>
@@ -139,31 +154,57 @@
     <li><strong>It fails partway</strong> (for example <em>"Invalid head of packet"</em>) <strong>or sits on
       "Connecting":</strong> close the installer, unplug the USB cable, plug it back in and click Install again. A failed
       try does no harm: the ESP32 simply needs the install run again before it will start. Plug the cable straight into
-      the computer, not into a hub, keyboard or monitor.</li>
+      the computer, not into a hub, keyboard or monitor. If it still fails, use the command-line method:
+      <code>flash_espfuji_release.py</code> from the release page.</li>
     <li><strong>The list of ports closes before you can pick one, or the port is "in use":</strong> close every other
       tab that has this installer open (and any serial monitor), then click Install again.</li>
     <li><strong>Still stuck on "Connecting"?</strong> Put the ESP32 into update mode by hand: it has two small buttons
       beside its USB socket, <em>BOOT</em> and <em>EN</em> (or <em>RST</em>). While the installer shows "Connecting",
       hold BOOT, tap EN, then let go of BOOT.</li>
-    <li><strong>The installer says there is no firmware for this chip:</strong> this page carries the stock firmware
-      for the ESP32 on the ESProFile boards only. For anything else, build it from
-      <a href="https://github.com/alexthecat123/ESProFile">Alex's repository</a>.</li>
-    <li><strong>The Lisa shows error 85 afterwards</strong> (or the ESProFile's light stays off or red): the ESProFile
-      is not answering the Lisa. Usually the install did not finish. Turn the Lisa off, use a better cable plugged
-      straight into the computer, and run the install again until it says the installation is complete. Then check
-      that the SD card is pushed fully in; an external ESProFile should be powered up before the Lisa.</li>
+    <li><strong>The Lisa shows error 85 after the update</strong> (or the ESProFile's light stays off or red): the
+      ESProFile is not answering the Lisa. Usually the install did not finish. Turn the Lisa off, use a better cable
+      plugged straight into the computer, and run the install again until it says the installation is complete. Then
+      check that the SD card is pushed fully in and that the board's small switch is on its emulator side; an external
+      ESProFile should be powered up before the Lisa.</li>
+    <li><strong>Want a backup of the old firmware first?</strong> This page cannot make one. The command-line script
+      can: <code>flash_espfuji_release.py backup</code>, and its <code>restore</code> puts the saved firmware back at
+      any time.</li>
+    <li><strong>The installer says there is no firmware for this chip:</strong> this page installs on the plain
+      ESP32 that the ESProFile boards carry. The fix in 1.1.3 is for that chip. An ESP32-S3 build is on the release
+      page for testers only: it has never run on hardware and does not have the fix yet.</li>
   </ul>
+
+  <h2>Going back to Alex's stock firmware</h2>
+  <p>With the stock firmware the ESProFile is a disk for the Lisa exactly as Alex made it. The Lisa programs that use
+    the network through ESPFuji (LisaFuji, the Browser and the others) will not reach the network until ESPFuji is put
+    back. Your disk image stays as it is, and <code>espfuji.ini</code> can stay on the SD card: the stock firmware
+    ignores it. The steps are the same as above (Lisa off, good cable, wait for "installation complete").</p>
+  <div class="card install">
+    <esp-web-install-button manifest="manifest_stock.json" id="inst-stock">
+      <button slot="activate">Install Alex's stock firmware</button>
+      <span slot="unsupported">
+        <strong>This browser cannot talk to USB devices.</strong> Open this page in Chrome or Microsoft Edge.
+      </span>
+      <span slot="not-allowed">
+        <strong>This page must be opened over https.</strong> Use the link from the ESPFuji repository.
+      </span>
+    </esp-web-install-button>
+    <p>Puts the ESProFile back to the firmware it came with (emulator 1.6), for the ESP32 on the ESProFile boards.
+      Takes about one to two minutes. Your disk image on the SD card is not touched.</p>
+  </div>
 
   <footer class="small">
     <p><strong>ESPFuji</strong> is Tim O'Connor's fork of Alex Anderson-McLeod's ESProFile firmware. It is not the
-      official ESProFile firmware, and this bug is not in Alex's firmware. Alex has approved of ESPFuji being published
-      but does not support it. The ESProFile boards and the stock firmware are
+      official ESProFile firmware. Alex has approved of it being published but does not support it: ESPFuji questions
+      and bugs go to the <a href="https://github.com/GyroPilot/ESPFuji/issues">ESPFuji Issues page</a>, never to Alex.
+      The ESProFile boards and the stock firmware are
       <a href="https://github.com/alexthecat123/ESProFile">Alex's</a>.</p>
+    <p>Release notes, the command-line script and checksums:
+      <a href="https://github.com/GyroPilot/ESPFuji/releases/tag/v1.1.3">ESPFuji 1.1.3 on GitHub</a>. Image checksum
+      (SHA-256): <code>166426e8aafa513e13e4013cd2d906bb946826eb6b24e5f1d8bc3ee0d7e2616b</code>.</p>
     <p>The stock firmware offered here was built, unchanged, from Alex's source (commit <code>708cfc1</code> of
-      11 November 2026: emulator 1.6, diagnostic 1.2) for the ESP32. It is provided by this page, not by Alex:
-      questions about this installer go to the
-      <a href="https://github.com/GyroPilot/ESPFuji/issues">ESPFuji Issues page</a>. Image checksum (SHA-256):
-      <code>feac19a52ca97c5654835ccad5ac76c9245ca8bd78c5c98bf3177cac689a1d77</code>.
+      11 November 2026: emulator 1.6, diagnostic 1.2) for the ESP32. It is provided by this page, not by Alex. Image
+      checksum (SHA-256): <code>feac19a52ca97c5654835ccad5ac76c9245ca8bd78c5c98bf3177cac689a1d77</code>.
       This page uses <a href="https://esphome.github.io/esp-web-tools/">ESP Web Tools</a>.</p>
     <p>This page counts visits and installs with <a href="https://www.goatcounter.com/">GoatCounter</a>: no cookies,
       no personal data.</p>
@@ -171,25 +212,28 @@
 </main>
 <script data-goatcounter="https://espfuji.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 <script>
-  // Count installs and bug-report clicks, not just visits: ESP Web Tools keeps its progress in the dialog's
-  // _installState (10.4.0: preparing, erasing, writing, finished, error). One event of each kind per installer window.
+  // Count installs and bug-report clicks, not just visits. ESP Web Tools keeps its progress in the dialog's
+  // _installState (10.4.0: preparing, erasing, writing, finished, error). Which of the two installers was opened is
+  // remembered from the click on its button. One event of each kind per installer window.
   (function () {
-    var sent = {};
+    var sent = {}, which = "espfuji";
     function ev(name) {
       if (sent[name]) return;
       if (!(window.goatcounter && window.goatcounter.count)) return; // script not loaded yet (or blocked): try again
       sent[name] = 1;
       window.goatcounter.count({ path: name, title: name, event: true });
     }
+    var a = document.getElementById("inst-espfuji"), b = document.getElementById("inst-stock");
+    if (a) a.addEventListener("click", function () { which = "espfuji"; }, true);
+    if (b) b.addEventListener("click", function () { which = "stock"; }, true);
     setInterval(function () {
       var d = document.querySelector("ewt-install-dialog");
-      if (!d) { delete sent["stock-installer-opened"]; delete sent["stock-install-started"];
-                delete sent["stock-install-finished"]; delete sent["stock-install-failed"]; return; }
-      ev("stock-installer-opened");
+      if (!d) { sent = { "report-bug-click": sent["report-bug-click"] }; return; }
+      ev(which + "-installer-opened");
       var s = d._installState && d._installState.state;
-      if (s === "erasing" || s === "writing") ev("stock-install-started");
-      else if (s === "finished") ev("stock-install-finished");
-      else if (s === "error") ev("stock-install-failed");
+      if (s === "erasing" || s === "writing") ev(which + "-install-started");
+      else if (s === "finished") ev(which + "-install-finished");
+      else if (s === "error") ev(which + "-install-failed");
     }, 500);
     var r = document.getElementById("report");
     if (r) r.addEventListener("click", function () { ev("report-bug-click"); });
