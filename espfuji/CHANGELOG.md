@@ -2,6 +2,39 @@
 
 Firmware versions are what HELLO prints ("ESPFuji 0.5.3"). The Lisa-side test tool has its own numbers (ESPFuji 0.2 REV C).
 
+## 1.1.3 (23 November 2026): no more lost bytes
+- **A block could lose a byte while the drive's own Wi-Fi was sending** (every version up to 1.1.2). When the ESP32's
+  network core sends a frame, the disk interface's reads of the pin registers are delayed by about a microsecond.
+  The emulator finds each strobe by polling the pin, so a delayed read could hide one. A block read by the Lisa then
+  went out a byte short, and a block written by the Lisa could be STORED a byte short without the Lisa being told.
+  Found on a Lisa 2/10 on 20 Nov 2026 (a catalog block with one byte missing: "You have no environments on the startup
+  disk"). On a bench, one ESProFile reading another while it answered 50 pings a second, 1.1.2 gave 62 to 116 short
+  reads in about 10,600.
+- **The fix:** for the length of every strobe phase (the six command bytes, the 532 bytes of a write, the status and
+  data of a read) the network core is parked with the IDF's cooperative stall and released at the phase's last byte,
+  when the host ends the phase, or after about 30 ms without a strobe. The reaction to a strobe is the same as in
+  Alex's loops, instruction for instruction. Same bench with 1.1.3: 52,982 reads and 42,356 writes at 50 pings a
+  second and 26,502 reads at 200 a second, none short, none refused.
+- **Write guard:** a block that does not arrive as exactly 532 bytes is not stored. The drive answers with status
+  bit 0 set, which makes the Lisa Office System repeat the write.
+- **The drive counts what it sees.** STATUS now ends with
+  `disk wr N refused N rd N odd N last N init N cmdodd N quiet N early N timeouts N`: writes, writes refused by the
+  guard, reads, reads the host did not take in full (and the index the last one stopped at), abandoned reads of the
+  spare table (the Lisa Office System makes one or two at every start: normal), commands that were not six bytes,
+  phases run with the network core parked (2 per read, 3 per write), phases the host ended early, phases released
+  by the time limit. On a healthy drive refused, odd and cmdodd stay at 0. In the ESPFuji tool on the Lisa, S shows
+  the line; on a Macintosh XL, Drive Test XL does.
+- **Tested:** a Lisa 2/10 with an internal ESProFile: a 50-minute session with a network game (3,523 reads, 2,588
+  writes, 784 requests served) and a restart (2,247 reads, 224 writes), nothing odd or refused. A Macintosh XL
+  (MacWorks Plus II, System 7.5.5, 16 MHz XLerator, internal ESProFile): Drive Test XL's Long Test twice, 50 passes
+  each of 256 KB written, read back and compared while the drive fetched a page per pass: 0 bytes differ, about
+  60,000 block transfers per run, nothing odd or refused.
+- **For the plain ESP32 only** (the chip on the ESProFile boards). The ESP32-S3 build keeps Alex's loops as in 1.1.2:
+  it has the write guard and the counters but NOT the parked core, and it has never run on hardware.
+- Nothing changed for the Lisa or Mac programs: same mailbox, same requests, same answers. espfuji.ini is unchanged.
+  If you used 1.1.2 or earlier on a disk you care about: update, keep any older backup of the disk image, and repair
+  the disk (Office System 1 diskette) or go back to the backup if the Lisa reports damage.
+
 ## 1.1.2 (20 November 2026): the disk is served at once
 - **A Lisa that powers up together with its ESProFile could fail to start from it** (error 10726 on a Lisa 2/10 on
   20 Nov 2026; a restart without switching off then worked). The cause: 1.1.1 scanned for its Wi-Fi network (about 3 s)

@@ -38,6 +38,44 @@ uint32_t blockNum; // The block that the current operation is being performed on
 uint16_t bufferIndex = 0; // Index into blockData and commandBuffer used during rapid comms with the Lisa
 
 bool prevState = 1; // Variables that are used for edge detection on the strobe line
+
+// ---- ESPFuji QUIET CORE (C5, 22 Nov 2026) ----
+// Work of core 0 (every frame our own software sends, the Wi-Fi driver, the tick) delays this core's reads of the
+// pin registers by up to 1.25 us at a time.  The loops below find a strobe by polling the pin, so a strobe could be
+// missed: a block sent or stored a byte short, silently.  While the host strobes, core 0 is therefore PARKED with
+// the IDF's cooperative stall (it waits in a high-priority interrupt, at an instruction boundary) and released at
+// the last expected byte of the phase.  Between park and release this core only reads and writes registers:
+// nothing there may take a lock or need core 0 (no micros(), no Serial, no SD card, no LED call).
+// NEVER use the hard stall esp_cpu_stall(): it froze core 0 in the middle of a bus access and hung the board.
+#if defined(CONFIG_IDF_TARGET_ESP32)
+#include "esp_ipc_isr.h"
+#define QC_ON 1
+#if ((CMD_Pin < 32) != (STRB_Pin < 32)) || ((PRES_Pin < 32) != (STRB_Pin < 32))
+#error "ESPFuji quiet core: CMD, PRES and STRB must be in the same GPIO input register (the wait loop reads one)"
+#endif
+#else
+#define QC_ON 0                     // other chips: not tried; the loops then run as before
+#endif
+#define QC_IDLE_PASSES 130000       // loop passes (about 0.23 us each) without a strobe before core 0 is released: about 30 ms
+uint32_t qcParked = 0;              // core 0 is parked now
+uint32_t qcWanted = 0;              // the next clearBSY opens a strobe phase
+volatile uint32_t qcPhases = 0;     // strobe phases run with core 0 parked
+volatile uint32_t qcEarly = 0;      // phases the HOST ended before their last expected byte (a new command, or a reset)
+volatile uint32_t qcTimeOuts = 0;   // phases in which the host stopped strobing: core 0 was released by the pass budget (the Lisa OS does this once at every start)
+static inline __attribute__((__always_inline__)) void qcPark(){
+#if QC_ON
+  if(!qcParked){ esp_ipc_isr_stall_other_cpu(); qcParked = 1; qcPhases = qcPhases + 1; }
+#endif
+}
+static inline __attribute__((__always_inline__)) void qcRelease(){
+#if QC_ON
+  if(qcParked){ esp_ipc_isr_release_other_cpu(); qcParked = 0; }
+#endif
+}
+// ESPFuji disk counters (reported by STATUS and once a minute)
+volatile uint32_t rdCount = 0, rdOdd = 0, rdInit = 0; volatile uint16_t rdLast = 0; // reads, reads that did not end at index 537, abandoned reads of the spare table, the last odd index
+volatile uint32_t cntWrites = 0, cntBad = 0; // writes, writes that did not arrive as 532 bytes (refused by the guard)
+volatile uint32_t cmdOdd = 0;                // commands that were not 6 bytes long
 bool currentState = 1;
 
 uint32_t startTime; // These two variables are used for detecting timeouts on the bus
@@ -133,9 +171,16 @@ void emulatorLoop() {
   for(int i = 0; i < 6; i++){ // And zero the whole thing out, in case this command ends up being less than 6 bytes
     commandBuffer[i] = 0;
   }
+  qcWanted = 1; // ESPFuji: this clearBSY opens a strobe phase
   clearBSY(); // Raise BSY to show that we're ready to receive a command
 
-  receiveCommand(); // Now receive the command from the host
+  receiveCommandQ(); // ESPFuji: the six command bytes, with core 0 parked
+  if(qcParked){ // ESPFuji: core 0 runs again
+    if(bufferIndex != 6){ if(bitRead(REG_READ(CMD_IN_REG), CMDPin) == 1 && bitRead(REG_READ(PRES_IN_REG), PRESPin) == 1) qcTimeOuts = qcTimeOuts + 1; else qcEarly = qcEarly + 1; }
+    qcRelease();
+  }
+  receiveCommand(); // Now receive the command from the host (ESPFuji: here only until the host lowers CMD)
+  if(bufferIndex != 6) cmdOdd = cmdOdd + 1; // ESPFuji: counted only (some hosts may send fewer than 6 bytes)
 
   if(commandBuffer[0] == 0x00){
     readDrive(); // If the first byte of the command is 0, then it's a read command
@@ -154,6 +199,93 @@ void emulatorLoop() {
     setBSY(); // And tell the host that it's there
   }
 }
+
+// ---- ESPFuji QUIET CORE: the loops that run while core 0 is parked. ----
+// They do what Alex's loops do (poll STRB, act on a falling edge) and leave at the phase's last expected byte, when
+// the host lowers CMD (or resets), or when the host has not strobed for QC_IDLE_PASSES passes.  The caller releases
+// core 0 and then enters Alex's own loop below, which waits for the host to lower CMD as before.
+// The WAIT is written by hand (ESP32 boards, where CMD, PRES and STRB sit in one input register): three register
+// reads and a pass counter, 12 instructions with one taken branch per pass, against 13 with three taken in the
+// compiler's version of Alex's loop.  So a pass is no longer than his, and the reaction to a strobe stays inside
+// the range his loop has.  NO function call inside these loops: with one, the compiler keeps the loop variables in
+// memory and the reaction gets slower (the first C5 did that: 23 instructions to the parity write instead of 11).
+#if QC_ON
+#define QCSTR2(x) #x
+#define QCSTR(x) QCSTR2(x)
+// Returns 1 = CMD or PRES low (the phase is over), 2 = falling edge on STRB, 3 = no strobe for `budget` passes.
+static inline __attribute__((__always_inline__)) uint32_t qcWait(uint32_t &prev, uint32_t &budget){
+  uint32_t why, t;
+  volatile uint32_t *in = (volatile uint32_t *)STRB_IN_REG;
+  __asm__ __volatile__(
+    "    movi.n %[why], 2\n"                         // (a falling edge leaves by falling out of the bottom)
+    "    j      1f\n"
+    "7:  movi.n %[why], 3\n"                         // the pass budget is used up
+    "    j      9f\n"
+    "8:  movi.n %[why], 1\n"                         // CMD or PRES low
+    "    j      9f\n"
+    "2:  movi.n %[prev], 1\n"                        // STRB was high
+    "3:  addi.n %[budget], %[budget], -1\n"
+    "    beqz   %[budget], 7b\n"
+    "1:  memw\n"
+    "    l32i   %[t], %[in], 0\n"
+    "    bbci   %[t], " QCSTR(CMDPin) ", 8b\n"
+    "    memw\n"
+    "    l32i   %[t], %[in], 0\n"
+    "    bbci   %[t], " QCSTR(PRESPin) ", 8b\n"
+    "    memw\n"
+    "    l32i   %[t], %[in], 0\n"
+    "    bbsi   %[t], " QCSTR(STRBPin) ", 2b\n"      // STRB high: nothing
+    "    beqz   %[prev], 3b\n"                       // low, and it was low before: nothing new
+    "9:\n"
+    : [prev] "+a"(prev), [budget] "+a"(budget), [why] "=&a"(why), [t] "=&a"(t)
+    : [in] "a"(in));
+  return why;
+}
+IRAM_ATTR void sendMultiDataQ() {
+  uint32_t prev = prevState, budget = QC_IDLE_PASSES;
+  uint16_t idx = bufferIndex;
+  while(qcWait(prev, budget) == 2){ // a falling edge on STRB: send the next byte
+    sendParity(blockData[idx]);
+    REG_WRITE(BUS_W1TS_REG, blockData[idx] << busOffset);
+    REG_WRITE(BUS_W1TC_REG, ((byte)~blockData[idx++] << busOffset));
+    prev = 0;
+    if(idx == 537) break; // the host has taken the last byte (of a read, or of a write's status)
+    budget = QC_IDLE_PASSES;
+  }
+  bufferIndex = idx; prevState = (prev != 0); currentState = prevState;
+}
+IRAM_ATTR void receiveCommandQ() {
+  uint32_t prev = prevState, budget = QC_IDLE_PASSES;
+  uint16_t idx = bufferIndex;
+  while(qcWait(prev, budget) == 2){ // a falling edge on STRB: the byte on the bus is valid
+    uint8_t b = REG_READ(BUS_IN_REG) >> busOffset;
+    commandBuffer[idx++] = b;      // (idx < 6 here: the loop leaves at 6)
+    sendParity(b);
+    prev = 0;
+    if(idx == 6) break; // the command is in
+    budget = QC_IDLE_PASSES;
+  }
+  bufferIndex = idx; prevState = (prev != 0); currentState = prevState;
+}
+IRAM_ATTR void receiveMultiDataQ() {
+  uint32_t prev = prevState, budget = QC_IDLE_PASSES;
+  uint16_t idx = bufferIndex;
+  while(qcWait(prev, budget) == 2){ // a falling edge on STRB: the byte on the bus is valid
+    uint8_t b = REG_READ(BUS_IN_REG) >> busOffset;
+    blockData[idx++] = b;          // (idx < 532 here: the loop leaves at 532)
+    sendParity(b);
+    prev = 0;
+    if(idx == 532) break; // the whole block is in
+    budget = QC_IDLE_PASSES;
+  }
+  bufferIndex = idx; prevState = (prev != 0); currentState = prevState;
+}
+#else
+// Other chips (the quiet core is not built there): nothing to do here; Alex's loops below run exactly as in 1.1.2.
+void sendMultiDataQ() {}
+void receiveCommandQ() {}
+void receiveMultiDataQ() {}
+#endif
 
 // This function sends multiple bytes of data in a row out of blockData, with the appropriate parity bits for each one
 // We stick it in IRAM (and thus make it a separate function) to speed it up and avoid cache misses that would happen otherwise
@@ -176,8 +308,15 @@ IRAM_ATTR void receiveCommand() {
   while(bitRead(REG_READ(CMD_IN_REG), CMDPin) == 1 && bitRead(REG_READ(PRES_IN_REG), PRESPin) == 1){ // Stay in the command-reception loop until the host lowers CMD or the drive is reset
     currentState = bitRead(REG_READ(STRB_IN_REG), STRBPin); // Read the current state of STRB
     if(currentState == 0 and prevState == 1){ // If we see a falling edge on STRB, read the bus and store the data in the command buffer
+#if QC_ON
+      uint8_t b = REG_READ(BUS_IN_REG) >> busOffset; // ESPFuji: only bytes beyond the six of the command arrive here
+      if(bufferIndex < sizeof(commandBuffer)) commandBuffer[bufferIndex] = b; // never past the buffer
+      bufferIndex++;
+      sendParity(b); // Send the parity bit out for that byte
+#else
       commandBuffer[bufferIndex] = REG_READ(BUS_IN_REG) >> busOffset;
       sendParity(commandBuffer[bufferIndex++]); // Send the parity bit out for that byte, and increment bufferIndex to the next spot in the buffer
+#endif
     }
     prevState = currentState; // Update the previous state of STRB
   }
@@ -188,8 +327,15 @@ IRAM_ATTR void receiveMultiData() {
   while(bitRead(REG_READ(CMD_IN_REG), CMDPin) == 1 && bitRead(REG_READ(PRES_IN_REG), PRESPin) == 1){ // Stay in the data-receiving loop until the host lowers CMD or the drive is reset
     currentState = bitRead(REG_READ(STRB_IN_REG), STRBPin); // Read the current state of STRB
     if(currentState == 0 and prevState == 1){ // If we see a falling edge on STRB, it means the data is valid
+#if QC_ON
+      uint8_t b = REG_READ(BUS_IN_REG) >> busOffset; // ESPFuji: only bytes beyond the 532 of the block arrive here
+      if(bufferIndex < sizeof(blockData)) blockData[bufferIndex] = b; // never past the buffer
+      bufferIndex++;
+      sendParity(b); // And send the appropriate parity for this byte
+#else
       blockData[bufferIndex] = REG_READ(BUS_IN_REG) >> busOffset; // So read the data from the bus into the blockData buffer
       sendParity(blockData[bufferIndex++]); // And send the appropriate parity for this byte, followed by incrementing the buffer index
+#endif
     }
     prevState = currentState; // Update the previous state of STRB
   }
@@ -602,8 +748,19 @@ void readDrive(){
   bufferIndex = 0; // Reset the blockData buffer index
   sendParity(blockData[bufferIndex]); // Put the parity for the first byte on the bus
   sendData(blockData[bufferIndex++]); // Followed by the byte itself, and increment the buffer index
+  qcWanted = 1; // ESPFuji: this clearBSY opens a strobe phase
   clearBSY(); // And raise BSY to tell the host that we're ready
-  sendMultiData(); // Now send the rest of the block data, with the appropriate parity bits for each byte
+  sendMultiDataQ(); // ESPFuji: the status and the block, with core 0 parked
+  if(qcParked){ // ESPFuji: core 0 runs again
+    if(bufferIndex != 537){ if(bitRead(REG_READ(CMD_IN_REG), CMDPin) == 1 && bitRead(REG_READ(PRES_IN_REG), PRESPin) == 1) qcTimeOuts = qcTimeOuts + 1; else qcEarly = qcEarly + 1; }
+    qcRelease();
+  }
+  sendMultiData(); // Now send the rest of the block data, with the appropriate parity bits for each byte (ESPFuji: here only until the host lowers CMD)
+  rdCount = rdCount + 1; // ESPFuji disk counters (no print here: this is the path to the host's next command)
+  if(bufferIndex != 537){ // 4 status + 532 block bytes = 536 strobes leave the index at 537
+    if(commandBuffer[1] == 0xFF and commandBuffer[2] == 0xFF and commandBuffer[3] == 0xFF) rdInit = rdInit + 1; // the spare table, abandoned by the host (the Lisa OS takes 25 bytes at every start): normal
+    else { rdOdd = rdOdd + 1; rdLast = bufferIndex; }
+  }
 }
 
 // Process and execute a write command
@@ -634,9 +791,16 @@ void writeDrive(){
   }
 
   bufferIndex = 0; // Reset the blockData buffer index
+  qcWanted = 1; // ESPFuji: this clearBSY opens a strobe phase
   clearBSY(); // Raise BSY to tell the host that we're ready to receive the data
  
-  receiveMultiData(); // And receive the block data from the host
+  receiveMultiDataQ(); // ESPFuji: the 532 bytes of the block, with core 0 parked
+  if(qcParked){ // ESPFuji: core 0 runs again
+    if(bufferIndex != 532){ if(bitRead(REG_READ(CMD_IN_REG), CMDPin) == 1 && bitRead(REG_READ(PRES_IN_REG), PRESPin) == 1) qcTimeOuts = qcTimeOuts + 1; else qcEarly = qcEarly + 1; }
+    qcRelease();
+  }
+  receiveMultiData(); // And receive the block data from the host (ESPFuji: here only until the host lowers CMD)
+  uint16_t rxCount = bufferIndex; // ESPFuji: bytes the host strobed in (532 for a whole block)
 
   setParallelDir(1); // Set the bus to output mode
   //delayMicroseconds(1);
@@ -661,10 +825,16 @@ void writeDrive(){
       return;
     }
   }
+  cntWrites = cntWrites + 1; // ESPFuji disk counters
+  bool shortWrite = (rxCount != 532); // ESPFuji WRITE GUARD: a block that did not arrive whole goes nowhere
+  if(shortWrite) cntBad = cntBad + 1;
   bool halt = false; // This flag will be set if the host wants to halt the emulator
   blockNum = (commandBuffer[1] << 16 | commandBuffer[2] << 8 | commandBuffer[3]); // Form a block number from bytes 1-3 of the command buffer
   // If the block number is 0xFFFFFD, the retry count is 0xFE, and the spare threshold is 0xAF, then it's a built-in Selector command
-  if(commandBuffer[1] == 0xFF and commandBuffer[2] == 0xFF and commandBuffer[3] == 0xFD and commandBuffer[4] == 0xFE and commandBuffer[5] == 0xAF){
+  if(shortWrite){
+    // ESPFuji WRITE GUARD: nothing is stored and no Selector command is run; the status below tells the host
+  }
+  else if(commandBuffer[1] == 0xFF and commandBuffer[2] == 0xFF and commandBuffer[3] == 0xFD and commandBuffer[4] == 0xFE and commandBuffer[5] == 0xAF){
     selectorCommandRun = true; // Set the flag indicating that a Selector command has been run
     // If the first four bytes in the received block are "HALT", then the host wants to halt the emulator
     if(blockData[0] == 0x48 and blockData[1] == 0x41 and blockData[2] == 0x4C and blockData[3] == 0x54){
@@ -957,13 +1127,20 @@ void writeDrive(){
   for(int i = writeStatusOffset; i < 536; i++){
     blockData[i] = 0x00;
   }
+  if(shortWrite) blockData[writeStatusOffset] = 0x01; // ESPFuji WRITE GUARD: bit 0 of status byte 0 (in Apple's fatal mask $C140C000): the Lisa Office System's driver repeats the write (up to 4 times); MacWorks reports a disk error; never answer $09 (both take that as success)
 
   bufferIndex = 532; // Set the buffer index to the first status byte
   sendParity(blockData[bufferIndex]); // Put its parity info on the PARITY line
   sendData(blockData[bufferIndex++]); // And put the status byte on the bus, incrementing the buffer index afterwards
 
+  qcWanted = 1; // ESPFuji: this clearBSY opens a strobe phase
   clearBSY(); // Raise BSY to tell the host that we're ready to continue
 
+  sendMultiDataQ(); // ESPFuji: the four status bytes, with core 0 parked
+  if(qcParked){ // ESPFuji: core 0 runs again
+    if(bufferIndex != 537){ if(bitRead(REG_READ(CMD_IN_REG), CMDPin) == 1 && bitRead(REG_READ(PRES_IN_REG), PRESPin) == 1) qcTimeOuts = qcTimeOuts + 1; else qcEarly = qcEarly + 1; }
+    qcRelease();
+  }
   sendMultiData(); // Now send the rest of the status bytes, with the appropriate parity for each byte
 
   if(halt == true){ // If we set the halt flag earlier, then we need to halt the ESProFile here
@@ -1101,6 +1278,7 @@ inline __attribute__((__always_inline__)) void setBSY(){
 
 inline __attribute__((__always_inline__)) void clearBSY(){
   setLEDColor(0, 1); // Same for clearing BSY; we have to turn the green LED on
+  if(qcWanted){ qcWanted = 0; qcPark(); } // ESPFuji: park core 0 AFTER the LED call (it takes a lock); from here to the last byte only register reads and writes
   REG_WRITE(BSY_W1TS_REG, 0b1 << BSYPin); // As well as setting BSY high
 }
 

@@ -48,7 +48,7 @@
 #endif
 // WiFi.h, WiFiClientSecure.h and HTTPClient.h are included at the top of ESProFile.ino (before the emulator defines).
 
-#define ESPFUJI_VERSION "ESPFuji 1.1.2"
+#define ESPFUJI_VERSION "ESPFuji 1.1.3"
 #define MB_NET_CORE   0                                // Wi-Fi's core; the interface owns core 1 with interrupts off
 #define MB_BODY_MAX   32768                            // the largest page body kept (a Lisa picture is 13 KB)
 #define MB_JOIN_MS    8000                             // how long mbSetup waits for the first Wi-Fi join
@@ -406,9 +406,11 @@ static void mbServe(const uint8_t *req, uint16_t len, uint8_t *out, uint16_t *ou
                  rtcWhy[0], rtcWhy[1], rtcWhy[2], rtcWhy[3], rtcWhy[4], rtcWhy[5], rtcWhy[6], rtcWhy[7],
                  (unsigned long)(millis() / 1000));
     } else if (strcmp(cmd, "STATUS") == 0) {
-        snprintf(txt, sizeof txt, "requests %lu replies %lu served %lu body %lu open %d",
+        snprintf(txt, sizeof txt, "requests %lu replies %lu served %lu body %lu open %d; disk wr %lu refused %lu rd %lu odd %lu last %u init %lu cmdodd %lu quiet %lu early %lu timeouts %lu",
                  (unsigned long)mbRequests, (unsigned long)mbReplies, (unsigned long)mbServed,
-                 (unsigned long)mbBodyLen, mbBodyOpen ? 1 : 0);
+                 (unsigned long)mbBodyLen, mbBodyOpen ? 1 : 0,
+                 (unsigned long)cntWrites, (unsigned long)cntBad, (unsigned long)rdCount, (unsigned long)rdOdd, (unsigned)rdLast, (unsigned long)rdInit,
+                 (unsigned long)cmdOdd, (unsigned long)qcPhases, (unsigned long)qcEarly, (unsigned long)qcTimeOuts);   // the disk counters
     } else if (strcmp(cmd, "CLOCK") == 0) {            // 0.5: "OK yyyy mm dd hh mi ss" (SNTP; UTC, or local with timezone=)
         time_t now = time(NULL);
         struct tm t;
@@ -588,7 +590,13 @@ static void mbTask(void *arg) {
     uint32_t lastJoin = 0;
     bool saidOn = false;
     bool started = !mbCfg.have;                        // 1.1.2t6: Wi-Fi not started yet
+    uint32_t dkT = 0, dkW = 0, dkR = 0;                // the disk counters, said once a minute when they moved
     for (;;) {
+        if (millis() - dkT > 60000 && (cntWrites != dkW || rdCount != dkR)) {
+            dkT = millis(); dkW = cntWrites; dkR = rdCount;
+            mbLog("ESPFuji disk: writes %lu refused %lu, reads %lu odd %lu (last %u) init %lu, cmd odd %lu, quiet phases %lu early %lu time-outs %lu\n", (unsigned long)dkW, (unsigned long)cntBad,
+                  (unsigned long)dkR, (unsigned long)rdOdd, (unsigned)rdLast, (unsigned long)rdInit, (unsigned long)cmdOdd, (unsigned long)qcPhases, (unsigned long)qcEarly, (unsigned long)qcTimeOuts);
+        }
         // 1.1.2t6: the radio stays quiet while the Lisa boots. The first scan and join wait until MB_WIFI_DEFER_MS
         // after power-up, or the first request (a Lisa program or the USB port), whichever comes first. With the
         // scan running during the boot reads, a 2/10 powering its internal ESProFile failed to boot (10726) on
