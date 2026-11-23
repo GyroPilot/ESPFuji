@@ -77,7 +77,8 @@ applications, and they find the drive by themselves.
 writes a file, reads it back and compares every byte while the drive's radio is busy, and shows the drive's counters
 (they need ESPFuji 1.1.3). See [its README](macxl-drivetest/README.md).
 
-**ESPFuji XL 1.0** (`espfuji/macxl-tool`; the `.dc42` on the Releases page): a Mac application for MacWorks Plus and
+**ESPFuji XL 1.1** (`espfuji/macxl-tool`; the `.dc42` on the Releases page; 1.1 adds Network > Drive Status, which shows the
+drive's STATUS line): a Mac application for MacWorks Plus and
 Plus II that talks to the same drive (Hello, Wi-Fi, set the Mac's clock, open a page, news). It needs firmware
 **1.1** (1.0 never answers it; see [its README](macxl-tool/README.md)). The Mac XL applications use the drive the same
 way: [FujiNet XL](https://github.com/GyroPilot/FujiNet-XL), [Browser XL](https://github.com/GyroPilot/Browser-XL),

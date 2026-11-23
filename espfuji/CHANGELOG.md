@@ -31,6 +31,12 @@ Firmware versions are what HELLO prints ("ESPFuji 0.5.3"). The Lisa-side test to
   60,000 block transfers per run, nothing odd or refused.
 - **For the plain ESP32 only** (the chip on the ESProFile boards). The ESP32-S3 build keeps Alex's loops as in 1.1.2:
   it has the write guard and the counters but NOT the parked core, and it has never run on hardware.
+- **Known issue, fix coming in 1.1.4** (found by the release check on 23 Nov): on a poor cable or a faulty board a control
+  line can glitch for one sample when many data lines switch together; the parked loop is then left early and a block can
+  be read one byte short (about 2 reads in 1,000 on a deliberately poor bench link with worst-case data; none on the
+  internal drives of the Lisa 2/10 and the Macintosh XL). Earlier versions and the original firmware end the transfer
+  at such a glitch. In STATUS, `timeouts` higher than `init` shows it.
+- **With this release for the Macintosh XL:** Drive Test XL 1.0 (new) and ESPFuji XL 1.1 (adds Network > Drive Status).
 - Nothing changed for the Lisa or Mac programs: same mailbox, same requests, same answers. espfuji.ini is unchanged.
   If you used 1.1.2 or earlier on a disk you care about: update, keep any older backup of the disk image, and repair
   the disk (Office System 1 diskette) or go back to the backup if the Lisa reports damage.
