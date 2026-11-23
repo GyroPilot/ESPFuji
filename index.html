@@ -56,10 +56,20 @@
 <body>
 <main>
   <h1>ESPFuji Installer</h1>
-  <p class="sub">Put ESPFuji 1.1.3 on an ESProFile from this page. No Python, no command line. Page updated 23 November 2026.</p>
+  <p class="sub">Put ESPFuji 1.1.3 on an ESProFile from this page. No Python, no command line. Page updated 23 November 2026 (known issue added).</p>
 
   <p class="info"><strong>ESPFuji is back: 1.1.3 fixes the bug that took it down.</strong> If your ESProFile runs
     ESPFuji 1.1.2 or earlier, please update. What was wrong and what changed is explained below.</p>
+
+  <p class="note"><strong>Known issue, fix coming in 1.1.4.</strong> ESPFuji 1.1.3 fixes the fault that lost bytes while
+    the drive's Wi-Fi was busy. One smaller weakness remains: on a poor cable or a faulty board, a control line can
+    glitch, and a block can then be read one byte short. It needs marginal hardware to show and is rare even then.
+    It is not new in 1.1.3: a glitch of this kind upsets every earlier ESPFuji and the original firmware as well.
+    Most people will never see it: in our tests the internal drives of a Lisa 2/10 and a Macintosh XL showed none.
+    ESPFuji 1.1.4 adds a guard against it and is being tested now. You can check your own drive: in its STATUS line
+    (<strong>S</strong> in the ESPFuji tool on a Lisa; Drive Status in ESPFuji XL 1.1, or Drive Test XL, on a Macintosh XL) <code>odd</code> and
+    <code>refused</code> should be 0, and <code>timeouts</code> should be no higher than <code>init</code> (a Lisa
+    makes one or two of those at every start).</p>
 
   <div class="card install">
     <esp-web-install-button manifest="manifest.json" id="inst-espfuji">
