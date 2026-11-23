@@ -57,7 +57,7 @@
 <body>
 <main>
   <h1>ESPFuji Installer</h1>
-  <p class="sub">Put ESPFuji 1.1.3 on an ESProFile from this page. No Python, no command line. Page updated 23 November 2026 (1.1.4 beta added).</p>
+  <p class="sub">Put ESPFuji 1.1.3 on an ESProFile from this page. No Python, no command line. Page updated 23 November 2026 (1.1.4 beta added; 1.1.5 pending, beta testers wanted).</p>
 
   <p class="info"><strong>ESPFuji is back: 1.1.3 fixes the bug that took it down.</strong> If your ESProFile runs
     ESPFuji 1.1.2 or earlier, please update. What was wrong and what changed is explained below.</p>
@@ -131,6 +131,18 @@
     <p>For the ESP32 on the ESProFile boards. The steps are the same as below (Lisa off, good cable, wait for
       "installation complete"). Your disk image and <code>espfuji.ini</code> on the SD card are not touched.
       Afterwards the drive answers Hello with <code>ESPFuji 1.1.4b1</code>.</p>
+  </div>
+
+  <h2 id="next">Next pending release: ESPFuji 1.1.5. Looking for beta testers</h2>
+  <p class="info"><strong>Looking for beta testers.</strong> ESPFuji 1.1.5 is the next release after 1.1.4. It adds
+    one more guard: a read whose command arrives damaged is answered with an error, so the Lisa repeats it (1.1.4
+    already refuses a damaged write). It has passed the bench tests and has not yet run in a Lisa, so there is no
+    download yet. If you would like to help test it, or the 1.1.4 beta above, please say so: tell us which Lisa or
+    Macintosh XL you have and whether your ESProFile is internal or external. Owners of an external ESProFile and
+    of a Macintosh XL are especially welcome.</p>
+  <div class="report">
+    <a class="btn second" id="tester" href="https://github.com/GyroPilot/ESPFuji/issues/new?title=Beta%20tester">Volunteer as a beta tester</a>
+    <p class="small">Opens the ESPFuji Issues page (a free GitHub account is needed).</p>
   </div>
 
   <h2>What was wrong, and what 1.1.3 changes</h2>
@@ -279,7 +291,7 @@
     if (c) c.addEventListener("click", function () { which = "beta"; }, true);
     setInterval(function () {
       var d = document.querySelector("ewt-install-dialog");
-      if (!d) { sent = { "report-bug-click": sent["report-bug-click"] }; return; }
+      if (!d) { sent = { "report-bug-click": sent["report-bug-click"], "beta-tester-click": sent["beta-tester-click"] }; return; }
       ev(which + "-installer-opened");
       var s = d._installState && d._installState.state;
       if (s === "erasing" || s === "writing") ev(which + "-install-started");
@@ -288,6 +300,8 @@
     }, 500);
     var r = document.getElementById("report");
     if (r) r.addEventListener("click", function () { ev("report-bug-click"); });
+    var t = document.getElementById("tester");
+    if (t) t.addEventListener("click", function () { ev("beta-tester-click"); });
   })();
 </script>
 </body>
