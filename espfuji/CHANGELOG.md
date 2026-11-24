@@ -2,6 +2,30 @@
 
 Firmware versions are what HELLO prints ("ESPFuji 0.5.3"). The Lisa-side test tool has its own numbers (ESPFuji 0.2 REV C).
 
+## 1.1.4 (24 November 2026): a guard for poor cables and faulty boards
+- **The known issue of 1.1.3 is closed.** On a poor cable or a faulty board a control line can show one low sample
+  when many data lines switch together. 1.1.3 left its protected loop on that sample, and a block could then be read
+  one byte short. 1.1.4 looks again, up to four times, with the network core still parked: a line that is high again
+  was a glitch, and the transfer goes on under protection.
+- **A write whose command did not arrive as six bytes is refused.** The block is not stored (a damaged command may
+  name another block); the drive answers with status bit 0 set and the Lisa Office System repeats the write. In
+  STATUS, `cmdodd` counts such commands and `refused` the writes that were not stored.
+- **Tested:** on a bench (one ESProFile reading and writing another, worst-case data, heavy Wi-Fi traffic and page
+  fetches by the drive itself) more than 700,000 block transfers, none short and none refused; the same bench shows
+  about 2 short reads in 1,000 with 1.1.3. A Lisa 2/10 with an internal ESProFile: a cold start and a session with a
+  network game, about 3,300 transfers. A Macintosh XL with an internal ESProFile: Drive Test XL's Quick Test, 9,486
+  reads and 2,767 writes. An external ESProFile (an ESP32 of chip revision 1.0) on its cable on a Lisa 2/10's 2-port
+  parallel card, as a second disk: a tool copied onto it and compared byte for byte, 730 transfers. Nothing odd and
+  nothing refused in any of them.
+- **Not supported: starting (booting) a Lisa from an external ESProFile attached to a parallel card.** The Lisa
+  shows error 85. Seen on a Lisa 2/10 with the 2-port card, with 1.1.2 as well as 1.1.4. Once the Lisa has started
+  from its internal disk, the same ESProFile on the same card and cable works normally as a second disk. This is
+  being looked into.
+- The released code is the public "1.1.4 beta 1" with the version text changed.
+- **For the plain ESP32 only**, like 1.1.3. The ESP32-S3 build has the write guards and the counters but NOT the
+  parked core (and so not its glitch guard), and it has never run on hardware.
+- Nothing changed for the Lisa or Mac programs: same mailbox, same requests, same answers. espfuji.ini is unchanged.
+
 ## 1.1.3 (23 November 2026): no more lost bytes
 - **A block could lose a byte while the drive's own Wi-Fi was sending** (every version up to 1.1.2). When the ESP32's
   network core sends a frame, the disk interface's reads of the pin registers are delayed by about a microsecond.

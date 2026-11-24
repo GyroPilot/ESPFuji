@@ -111,6 +111,10 @@ the raw `.image` the ESProFile uses, both ways.
   Macintosh XL); a READ at offset 0 echoes 0; the page body read every time round. The Mac XL applications 1.1 were
   tested with these on a real Macintosh XL and a Lisa 2/10.
 - **1.1** (Releases, 8 Nov 2026): the 1.1b3 code with the version changed. Proven 12 Nov 2026 on a Lisa 2/10's internal ESProFile (a whole LisaCheckers game against the Macintosh XL over a travel hotspot) and on the Macintosh XL's internal ESProFile (HELLO 1.1, Wi-Fi at -46 dBm).
+- **1.1.4** (Releases, 24 Nov 2026): a guard for poor cables and faulty boards: a glitch on a control line no longer
+  ends the protection of the block being transferred, and a write whose command arrived damaged is refused, so the
+  Lisa repeats it. For the plain ESP32. **Not supported: starting (booting) a Lisa from an external ESProFile
+  attached to a parallel card** (error 85; as a second disk it works). See CHANGELOG.md.
 - **1.1.3** (Releases, 23 Nov 2026): no more lost bytes. Up to 1.1.2 a block could lose a byte while the drive's own
   Wi-Fi was sending; 1.1.3 parks the network core during every disk transfer, refuses a block that does not arrive
   complete, and counts what it sees (STATUS). For the plain ESP32. See CHANGELOG.md.

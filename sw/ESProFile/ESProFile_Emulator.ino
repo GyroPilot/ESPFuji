@@ -76,6 +76,7 @@ static inline __attribute__((__always_inline__)) void qcRelease(){
 volatile uint32_t rdCount = 0, rdOdd = 0, rdInit = 0; volatile uint16_t rdLast = 0; // reads, reads that did not end at index 537, abandoned reads of the spare table, the last odd index
 volatile uint32_t cntWrites = 0, cntBad = 0; // writes, writes that did not arrive as 532 bytes (refused by the guard)
 volatile uint32_t cmdOdd = 0;                // commands that were not 6 bytes long
+bool cmdBad = false;                         // 1.1.3G4: the command now being served did not arrive as exactly 6 bytes
 bool currentState = 1;
 
 uint32_t startTime; // These two variables are used for detecting timeouts on the bus
@@ -180,7 +181,8 @@ void emulatorLoop() {
     qcRelease();
   }
   receiveCommand(); // Now receive the command from the host (ESPFuji: here only until the host lowers CMD)
-  if(bufferIndex != 6) cmdOdd = cmdOdd + 1; // ESPFuji: counted only (some hosts may send fewer than 6 bytes)
+  cmdBad = (bufferIndex != 6); // 1.1.3G4: remembered for the write path (a damaged command may name another block)
+  if(cmdBad) cmdOdd = cmdOdd + 1; // counted; a read is answered as before
 
   if(commandBuffer[0] == 0x00){
     readDrive(); // If the first byte of the command is 0, then it's a read command
@@ -221,8 +223,17 @@ static inline __attribute__((__always_inline__)) uint32_t qcWait(uint32_t &prev,
     "    j      1f\n"
     "7:  movi.n %[why], 3\n"                         // the pass budget is used up
     "    j      9f\n"
-    "8:  movi.n %[why], 1\n"                         // CMD or PRES low
+    "8:  movi.n %[why], 4\n"                         // CMD or PRES sampled low: look again, up to four times (1.1.3G1)
+    "5:  memw\n"
+    "    l32i   %[t], %[in], 0\n"
+    "    bbci   %[t], " QCSTR(CMDPin) ", 4f\n"
+    "    bbsi   %[t], " QCSTR(PRESPin) ", 6f\n"      // both high again: it was a dip
+    "4:  addi.n %[why], %[why], -1\n"
+    "    bnez   %[why], 5b\n"
+    "    movi.n %[why], 1\n"                         // low every time: the phase is over
     "    j      9f\n"
+    "6:  movi.n %[why], 2\n"                         // a dip: go on waiting (the budget counts down)
+    "    j      3f\n"
     "2:  movi.n %[prev], 1\n"                        // STRB was high
     "3:  addi.n %[budget], %[budget], -1\n"
     "    beqz   %[budget], 7b\n"
@@ -826,7 +837,7 @@ void writeDrive(){
     }
   }
   cntWrites = cntWrites + 1; // ESPFuji disk counters
-  bool shortWrite = (rxCount != 532); // ESPFuji WRITE GUARD: a block that did not arrive whole goes nowhere
+  bool shortWrite = (rxCount != 532) || cmdBad; // ESPFuji WRITE GUARD: a block that did not arrive whole goes nowhere; 1.1.3G4: nor one whose command was not 6 bytes
   if(shortWrite) cntBad = cntBad + 1;
   bool halt = false; // This flag will be set if the host wants to halt the emulator
   blockNum = (commandBuffer[1] << 16 | commandBuffer[2] << 8 | commandBuffer[3]); // Form a block number from bytes 1-3 of the command buffer

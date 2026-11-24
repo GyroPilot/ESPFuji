@@ -6,6 +6,11 @@ anything else: it names the firmware and says whether espfuji.ini was read.
 **The status LED is red and the Lisa does not see the drive.** The board has no SD card it can use. Alex's firmware
 halts without a card. Seat the card and press reset (or unplug and replug the USB cable). Seen after every card swap.
 
+**The Lisa shows error 85 when it is started from an external ESProFile on a parallel card.** ESPFuji does not
+support starting (booting) a Lisa from an external ESProFile attached to a parallel card (seen on a Lisa 2/10 with
+the 2-port card, ESPFuji 1.1.2 and 1.1.4, November 2026). Start the Lisa from its internal disk: the external
+ESProFile on the parallel card then mounts and works normally as a second disk. This is being looked into.
+
 **HELLO says "espfuji.ini read: ssid no".** The file is missing or misnamed on the card: it must be `espfuji.ini` in
 the card's root, plain text, `ssid=` and `password=` lines (see espfuji.ini.example). The card is FAT32.
 
