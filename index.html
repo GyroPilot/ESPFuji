@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ESPFuji Installer</title>
-<meta name="description" content="Install ESPFuji 1.1.3 on an ESProFile from the browser. 1.1.3 fixes the write bug of 1.1.2 and earlier.">
+<meta name="description" content="Install ESPFuji 1.1.4 on an ESProFile from the browser. 1.1.4 adds a guard for poor cables and faulty boards to the write fix of 1.1.3.">
 <script type="module" src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"></script>
 <style>
   :root {
@@ -57,25 +57,20 @@
 <body>
 <main>
   <h1>ESPFuji Installer</h1>
-  <p class="sub">Put ESPFuji 1.1.3 on an ESProFile from this page. No Python, no command line. Page updated 23 November 2026 (1.1.4 beta added; 1.1.5 pending, beta testers wanted).</p>
+  <p class="sub">Put ESPFuji 1.1.4 on an ESProFile from this page. No Python, no command line. Page updated 24 November 2026 (1.1.4 released; 1.1.5 pending, beta testers wanted).</p>
 
-  <p class="info"><strong>ESPFuji is back: 1.1.3 fixes the bug that took it down.</strong> If your ESProFile runs
-    ESPFuji 1.1.2 or earlier, please update. What was wrong and what changed is explained below.</p>
+  <p class="info"><strong>ESPFuji 1.1.4 is the current version.</strong> If your ESProFile runs ESPFuji 1.1.3 or
+    earlier, please update. 1.1.3 fixed the fault that lost bytes while the drive's Wi-Fi was busy; 1.1.4 adds a
+    guard for poor cables and faulty boards. What was wrong and what changed is explained below.</p>
 
-  <p class="note"><strong>Known issue, fix coming in 1.1.4.</strong> ESPFuji 1.1.3 fixes the fault that lost bytes while
-    the drive's Wi-Fi was busy. One smaller weakness remains: on a poor cable or a faulty board, a control line can
-    glitch, and a block can then be read one byte short. It needs marginal hardware to show and is rare even then.
-    It is not new in 1.1.3: a glitch of this kind upsets every earlier ESPFuji and the original firmware as well.
-    Most people will never see it: in our tests the internal drives of a Lisa 2/10 and a Macintosh XL showed none.
-    ESPFuji 1.1.4 adds a guard against it and is in final testing: a beta is offered
-    <a href="#beta">further down this page</a>. You can check your own drive: in its STATUS line
-    (<strong>S</strong> in the ESPFuji tool on a Lisa; Drive Status in ESPFuji XL 1.1, or Drive Test XL, on a Macintosh XL) <code>odd</code> and
-    <code>refused</code> should be 0, and <code>timeouts</code> should be no higher than <code>init</code> (a Lisa
-    makes one or two of those at every start).</p>
+  <p class="note" id="extboot"><strong>Not supported: starting the Lisa from an external ESProFile on a parallel
+    card.</strong> ESPFuji does not support starting (booting) a Lisa from an external ESProFile attached to a
+    parallel card: the Lisa shows error 85. Once the Lisa has started from its internal disk, an external ESProFile
+    on a parallel card works normally as a second disk. We are looking into it.</p>
 
   <div class="card install">
     <esp-web-install-button manifest="manifest.json" id="inst-espfuji">
-      <button slot="activate">Install ESPFuji 1.1.3</button>
+      <button slot="activate">Install ESPFuji 1.1.4</button>
       <span slot="unsupported">
         <strong>This browser cannot talk to USB devices.</strong><br>
         Open this page in <strong>Chrome</strong> or <strong>Microsoft Edge</strong> on a Windows, Mac, Linux or
@@ -98,46 +93,11 @@
       which Lisa, and what you saw. ESPFuji reports go here, never to Alex.</p>
   </div>
 
-  <h2 id="beta">ESPFuji 1.1.4 beta: in final testing</h2>
-  <p class="note"><strong>This is a beta, not the finished 1.1.4.</strong> ESPFuji 1.1.3 above is the released
-    version and the right choice for most people. The beta is here for anyone who wants the guard against the known
-    issue now, or who would like to help with the last tests.</p>
-  <p><strong>What it adds to 1.1.3:</strong> a glitch on a control line no longer ends the drive's protection for
-    the block being transferred, and a write whose command arrived damaged is refused, so the Lisa repeats it.
-    Everything else is 1.1.3.</p>
-  <ul>
-    <li><strong>Tested:</strong> on a bench (one ESProFile reading and writing another, with worst-case data and
-      heavy Wi-Fi traffic) more than 700,000 block transfers, none short and none refused; the same bench shows
-      short reads with 1.1.3. On a Lisa 2/10 with an internal ESProFile: a cold start and a session with a network
-      game, about 3,300 block transfers, nothing odd.</li>
-    <li><strong>Not yet tested:</strong> a Macintosh XL, and an external ESProFile on its cable. If you try the beta
-      on either, please tell us what you see.</li>
-    <li><strong>Try it if</strong> your drive's STATUS line shows <code>odd</code> above 0 or <code>timeouts</code>
-      higher than <code>init</code>, or if you want to help test. Otherwise stay on 1.1.3: the finished 1.1.4 will
-      appear on this page.</li>
-    <li><strong>Before you install a beta,</strong> copy your disk image off the SD card.</li>
-    <li><strong>Going back</strong> is the Install ESPFuji 1.1.3 button at the top of this page.</li>
-  </ul>
-  <div class="card install beta">
-    <esp-web-install-button manifest="manifest_beta.json" id="inst-beta">
-      <button slot="activate">Install ESPFuji 1.1.4 beta 1</button>
-      <span slot="unsupported">
-        <strong>This browser cannot talk to USB devices.</strong> Open this page in Chrome or Microsoft Edge.
-      </span>
-      <span slot="not-allowed">
-        <strong>This page must be opened over https.</strong> Use the link from the ESPFuji repository.
-      </span>
-    </esp-web-install-button>
-    <p>For the ESP32 on the ESProFile boards. The steps are the same as below (Lisa off, good cable, wait for
-      "installation complete"). Your disk image and <code>espfuji.ini</code> on the SD card are not touched.
-      Afterwards the drive answers Hello with <code>ESPFuji 1.1.4b1</code>.</p>
-  </div>
-
   <h2 id="next">Next pending release: ESPFuji 1.1.5. Looking for beta testers</h2>
-  <p class="info"><strong>Looking for beta testers.</strong> ESPFuji 1.1.5 is the next release after 1.1.4. It adds
+  <p class="info"><strong>Looking for beta testers.</strong> ESPFuji 1.1.5 is the next release. It adds
     one more guard: a read whose command arrives damaged is answered with an error, so the Lisa repeats it (1.1.4
     already refuses a damaged write). It has passed the bench tests and has not yet run in a Lisa, so there is no
-    download yet. If you would like to help test it, or the 1.1.4 beta above, please say so: tell us which Lisa or
+    download yet. If you would like to help test it, please say so: tell us which Lisa or
     Macintosh XL you have and whether your ESProFile is internal or external. Owners of an external ESProFile and
     of a Macintosh XL are especially welcome.</p>
   <div class="report">
@@ -145,7 +105,7 @@
     <p class="small">Opens the ESPFuji Issues page (a free GitHub account is needed).</p>
   </div>
 
-  <h2>What was wrong, and what 1.1.3 changes</h2>
+  <h2>What was wrong, and what 1.1.3 and 1.1.4 change</h2>
   <p>With ESPFuji 1.1.2 and earlier, the ESProFile could occasionally lose a byte of a block while its own Wi-Fi was
     sending. A block written by the Lisa could then be stored a byte short, and the Lisa was not told, so the damage
     showed up later. On one Lisa 2/10 it made the startup disk unusable ("You have no environments on the startup
@@ -157,10 +117,23 @@
   <p>Tested before release: more than 120,000 block transfers on a test bench with the radio busy, a Lisa 2/10 through
     a working session with a network game and a restart, and a Macintosh XL through two half-hour tests that wrote
     and compared every byte. No lost byte in any of them.</p>
+  <p><strong>ESPFuji 1.1.4</strong> closes one smaller weakness that 1.1.3 still had: on a poor cable or a faulty
+    board a control line can glitch, and a block could then be read one byte short. In 1.1.4 such a glitch no longer
+    ends the drive's protection for the block being transferred, and a write whose command arrived damaged is
+    refused, so the Lisa repeats it. Everything else is 1.1.3.</p>
+  <p>Tested before release: on a bench (one ESProFile reading and writing another, with worst-case data and heavy
+    Wi-Fi traffic) more than 700,000 block transfers, none short and none refused, where the same bench shows short
+    reads with 1.1.3; a Lisa 2/10 with an internal ESProFile through a cold start and a session with a network game;
+    a Macintosh XL through Drive Test XL; and an external ESProFile on its cable as a second disk of a Lisa 2/10,
+    with a tool copied onto it and compared byte for byte.</p>
+  <p>You can check your own drive: in its STATUS line (<strong>S</strong> in the ESPFuji tool on a Lisa; Drive Status
+    in ESPFuji XL 1.1, or Drive Test XL, on a Macintosh XL) <code>odd</code> and <code>refused</code> should be 0,
+    and <code>timeouts</code> should be no higher than <code>init</code> (a Lisa makes one or two of those at every
+    start).</p>
 
   <h2>If you used ESPFuji 1.1.2 or earlier</h2>
   <ul>
-    <li><strong>Update to 1.1.3</strong> with the button above.</li>
+    <li><strong>Update to 1.1.4</strong> with the button above.</li>
     <li>A disk that was written to under an older ESPFuji may hold a damaged block. If you have a backup of the disk
       image from before, keep it. If the Lisa reports a damaged disk, repair it from the Office System 1 diskette or
       go back to your backup.</li>
@@ -192,7 +165,7 @@
   <ol>
     <li>Turn the Lisa off.</li>
     <li>Plug the USB cable into the ESP32 board on the ESProFile and into the computer.</li>
-    <li>Click <strong>Install ESPFuji 1.1.3</strong> above.</li>
+    <li>Click <strong>Install ESPFuji 1.1.4</strong> above.</li>
     <li>A list of ports appears. Pick the one that appeared when you plugged the cable in (often named
       <em>CP210x</em>, <em>USB Serial</em> or <em>usbserial</em>) and click <strong>Connect</strong>.</li>
     <li>Click <strong>Install</strong>. The installer then asks you to confirm and says <em>"All data on the device
@@ -200,7 +173,7 @@
       <code>espfuji.ini</code> are not touched. Click <strong>Install</strong> again and wait until it says the
       installation is complete (about two minutes). Do not unplug the cable while it is writing.</li>
     <li>Unplug the USB cable, put the SD card back if you took it out, and start the Lisa. Your Lisa programs work as
-      before; ESPFuji's HELLO now answers <code>ESPFuji 1.1.3</code>. Wi-Fi joins about a minute after power-up, or as
+      before; ESPFuji's HELLO now answers <code>ESPFuji 1.1.4</code>. Wi-Fi joins about a minute after power-up, or as
       soon as a Lisa program asks for the network.</li>
   </ol>
 
@@ -224,13 +197,15 @@
       ESProFile is not answering the Lisa. Usually the install did not finish. Turn the Lisa off, use a better cable
       plugged straight into the computer, and run the install again until it says the installation is complete. Then
       check that the SD card is pushed fully in and that the board's small switch is on its emulator side; an external
-      ESProFile should be powered up before the Lisa.</li>
+      ESProFile should be powered up before the Lisa. <strong>Error 85 when you start the Lisa from an external
+      ESProFile on a parallel card</strong> is something else: ESPFuji does not support that (see the
+      <a href="#extboot">note at the top of this page</a>). Start the Lisa from its internal disk.</li>
     <li><strong>Want a backup of the old firmware first?</strong> This page cannot make one. The command-line script
       can: <code>flash_espfuji_release.py backup</code>, and its <code>restore</code> puts the saved firmware back at
       any time.</li>
     <li><strong>The installer says there is no firmware for this chip:</strong> this page installs on the plain
-      ESP32 that the ESProFile boards carry. The fix in 1.1.3 is for that chip. An ESP32-S3 build is on the release
-      page for testers only: it has never run on hardware and does not have the fix yet.</li>
+      ESP32 that the ESProFile boards carry. The fixes in 1.1.3 and 1.1.4 are for that chip. An ESP32-S3 build is on
+      the release page for testers only: it has never run on hardware and does not have the main fix yet.</li>
   </ul>
 
   <h2>Going back to Alex's stock firmware</h2>
@@ -259,10 +234,8 @@
       The ESProFile boards and the stock firmware are
       <a href="https://github.com/alexthecat123/ESProFile">Alex's</a>.</p>
     <p>Release notes, the command-line script and checksums:
-      <a href="https://github.com/GyroPilot/ESPFuji/releases/tag/v1.1.3">ESPFuji 1.1.3 on GitHub</a>. Image checksum
-      (SHA-256): <code>166426e8aafa513e13e4013cd2d906bb946826eb6b24e5f1d8bc3ee0d7e2616b</code>.</p>
-    <p>The 1.1.4 beta 1 image is offered on this page only, until 1.1.4 is released. Image checksum (SHA-256):
-      <code>28e3c51c6e7ea5d1a501edfc76fce6849ccffd3a20e6a518c31556eca7dc4b71</code>.</p>
+      <a href="https://github.com/GyroPilot/ESPFuji/releases/tag/v1.1.4">ESPFuji 1.1.4 on GitHub</a>. Image checksum
+      (SHA-256): <code>0184c79635fef81d2005c94b248a683037c82de8965c0e46ae9c813c7b47c194</code>.</p>
     <p>The stock firmware offered here was built, unchanged, from Alex's source (commit <code>708cfc1</code> of
       11 November 2026: emulator 1.6, diagnostic 1.2) for the ESP32. It is provided by this page, not by Alex. Image
       checksum (SHA-256): <code>feac19a52ca97c5654835ccad5ac76c9245ca8bd78c5c98bf3177cac689a1d77</code>.
