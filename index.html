@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ESPFuji Installer</title>
-<meta name="description" content="Install ESPFuji 1.1.4 on an ESProFile from the browser. 1.1.4 adds a guard for poor cables and faulty boards to the write fix of 1.1.3.">
+<meta name="description" content="Install ESPFuji 1.1.5 on an ESProFile from the browser. With 1.1.5 a Lisa starts from an external ESProFile on a parallel card again (error 85 fixed).">
 <script type="module" src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"></script>
 <style>
   :root {
@@ -57,20 +57,22 @@
 <body>
 <main>
   <h1>ESPFuji Installer</h1>
-  <p class="sub">Put ESPFuji 1.1.4 on an ESProFile from this page. No Python, no command line. Page updated 24 November 2026 (1.1.4 released; 1.1.5 pending, beta testers wanted).</p>
+  <p class="sub">Put ESPFuji 1.1.5 on an ESProFile from this page. No Python, no command line. Page updated 24 November 2026 (1.1.5 released: a Lisa starts from an external ESProFile on a parallel card again).</p>
 
-  <p class="info"><strong>ESPFuji 1.1.4 is the current version.</strong> If your ESProFile runs ESPFuji 1.1.3 or
-    earlier, please update. 1.1.3 fixed the fault that lost bytes while the drive's Wi-Fi was busy; 1.1.4 adds a
-    guard for poor cables and faulty boards. What was wrong and what changed is explained below.</p>
+  <p class="info"><strong>ESPFuji 1.1.5 is the current version.</strong> If your ESProFile runs ESPFuji 1.1.4 or
+    earlier, please update. 1.1.3 fixed the fault that lost bytes while the drive's Wi-Fi was busy; 1.1.4 added a
+    guard for poor cables and faulty boards; with 1.1.5 a Lisa starts from an external ESProFile on a parallel card
+    again. What was wrong and what changed is explained below.</p>
 
-  <p class="note" id="extboot"><strong>Not supported: starting the Lisa from an external ESProFile on a parallel
-    card.</strong> ESPFuji does not support starting (booting) a Lisa from an external ESProFile attached to a
-    parallel card: the Lisa shows error 85. Once the Lisa has started from its internal disk, an external ESProFile
-    on a parallel card works normally as a second disk. We are looking into it.</p>
+  <p class="info" id="extboot"><strong>Fixed in 1.1.5: starting the Lisa from an external ESProFile on a parallel
+    card.</strong> With ESPFuji 1.1.4 and 1.1.2 the Lisa showed error 85 when it was started from an external
+    ESProFile attached to a parallel card. The drive answered the boot ROM of the card too late. 1.1.5 answers in
+    time: a Lisa 2/10 starts from Apple's 2-port parallel card again. If you start your Lisa from an external
+    ESProFile, update to 1.1.5.</p>
 
   <div class="card install">
     <esp-web-install-button manifest="manifest.json" id="inst-espfuji">
-      <button slot="activate">Install ESPFuji 1.1.4</button>
+      <button slot="activate">Install ESPFuji 1.1.5</button>
       <span slot="unsupported">
         <strong>This browser cannot talk to USB devices.</strong><br>
         Open this page in <strong>Chrome</strong> or <strong>Microsoft Edge</strong> on a Windows, Mac, Linux or
@@ -93,8 +95,9 @@
       which Lisa, and what you saw. ESPFuji reports go here, never to Alex.</p>
   </div>
 
-  <h2 id="next">Next pending release: ESPFuji 1.1.5. Looking for beta testers</h2>
-  <p class="info"><strong>Looking for beta testers.</strong> ESPFuji 1.1.5 is the next release. It adds
+  <h2 id="next">Next pending release: ESPFuji 1.1.6. Looking for beta testers</h2>
+  <p class="info"><strong>Looking for beta testers.</strong> ESPFuji 1.1.6 is the next release (it was announced here as 1.1.5;
+    that number went to the start-up fix). It adds
     one more guard: a read whose command arrives damaged is answered with an error, so the Lisa repeats it (1.1.4
     already refuses a damaged write). It has passed the bench tests and has not yet run in a Lisa, so there is no
     download yet. If you would like to help test it, please say so: tell us which Lisa or
@@ -105,7 +108,7 @@
     <p class="small">Opens the ESPFuji Issues page (a free GitHub account is needed).</p>
   </div>
 
-  <h2>What was wrong, and what 1.1.3 and 1.1.4 change</h2>
+  <h2>What was wrong, and what 1.1.3, 1.1.4 and 1.1.5 change</h2>
   <p>With ESPFuji 1.1.2 and earlier, the ESProFile could occasionally lose a byte of a block while its own Wi-Fi was
     sending. A block written by the Lisa could then be stored a byte short, and the Lisa was not told, so the damage
     showed up later. On one Lisa 2/10 it made the startup disk unusable ("You have no environments on the startup
@@ -126,6 +129,16 @@
     reads with 1.1.3; a Lisa 2/10 with an internal ESProFile through a cold start and a session with a network game;
     a Macintosh XL through Drive Test XL; and an external ESProFile on its cable as a second disk of a Lisa 2/10,
     with a tool copied onto it and compared byte for byte.</p>
+  <p><strong>ESPFuji 1.1.5</strong> lets a Lisa start from an external ESProFile on a parallel card again. To start
+    from a parallel card the Lisa uses the boot ROM on that card, and the ROM of Apple's 2-port card waits only about
+    0.9 milliseconds for the drive to answer before it gives up with error 85. ESPFuji 1.1.2 and 1.1.4 answered after
+    about 2 milliseconds, because the firmware switched its light with a slow call before every answer. 1.1.5
+    switches the light directly and answers in a few millionths of a second. The Lisa's own boot ROM and the Office
+    System wait far longer, which is why an internal ESProFile, and an external one used as a second disk, worked all
+    along. Disk transfers are faster as well.</p>
+  <p>Tested before release: a Lisa 2/10 with Apple's 2-port parallel card and an external ESProFile on its cable,
+    the same board, cable and SD card in one sitting: 1.1.4 gave error 85 twice, 1.1.5 started the Office System
+    four times out of four, one of them with an internal ESProFile mounted beside it. Started from the internal disk, the external ESProFile with 1.1.5 mounted as a second disk and a tool was copied onto it. Two controls on the same board: the stock firmware offered on this page (the stock 1.6 source built here with the same Arduino core) gave error 85 as well, and a factory-original build of the stock emulator (1.2) started the Lisa. The released image itself on the bench: 36,006 reads and 35,582 writes in three minutes each and 18,008 reads through a restart, all with the radio busy, nothing odd or refused; its answer to the host takes 1.5 microseconds, and in 145,000 handshakes none took longer than 14 microseconds.</p>
   <p>You can check your own drive: in its STATUS line (<strong>S</strong> in the ESPFuji tool on a Lisa; Drive Status
     in ESPFuji XL 1.1, or Drive Test XL, on a Macintosh XL) <code>odd</code> and <code>refused</code> should be 0,
     and <code>timeouts</code> should be no higher than <code>init</code> (a Lisa makes one or two of those at every
@@ -133,7 +146,7 @@
 
   <h2>If you used ESPFuji 1.1.2 or earlier</h2>
   <ul>
-    <li><strong>Update to 1.1.4</strong> with the button above.</li>
+    <li><strong>Update to 1.1.5</strong> with the button above.</li>
     <li>A disk that was written to under an older ESPFuji may hold a damaged block. If you have a backup of the disk
       image from before, keep it. If the Lisa reports a damaged disk, repair it from the Office System 1 diskette or
       go back to your backup.</li>
@@ -165,7 +178,7 @@
   <ol>
     <li>Turn the Lisa off.</li>
     <li>Plug the USB cable into the ESP32 board on the ESProFile and into the computer.</li>
-    <li>Click <strong>Install ESPFuji 1.1.4</strong> above.</li>
+    <li>Click <strong>Install ESPFuji 1.1.5</strong> above.</li>
     <li>A list of ports appears. Pick the one that appeared when you plugged the cable in (often named
       <em>CP210x</em>, <em>USB Serial</em> or <em>usbserial</em>) and click <strong>Connect</strong>.</li>
     <li>Click <strong>Install</strong>. The installer then asks you to confirm and says <em>"All data on the device
@@ -173,7 +186,7 @@
       <code>espfuji.ini</code> are not touched. Click <strong>Install</strong> again and wait until it says the
       installation is complete (about two minutes). Do not unplug the cable while it is writing.</li>
     <li>Unplug the USB cable, put the SD card back if you took it out, and start the Lisa. Your Lisa programs work as
-      before; ESPFuji's HELLO now answers <code>ESPFuji 1.1.4</code>. Wi-Fi joins about a minute after power-up, or as
+      before; ESPFuji's HELLO now answers <code>ESPFuji 1.1.5</code>. Wi-Fi joins about a minute after power-up, or as
       soon as a Lisa program asks for the network.</li>
   </ol>
 
@@ -198,14 +211,15 @@
       plugged straight into the computer, and run the install again until it says the installation is complete. Then
       check that the SD card is pushed fully in and that the board's small switch is on its emulator side; an external
       ESProFile should be powered up before the Lisa. <strong>Error 85 when you start the Lisa from an external
-      ESProFile on a parallel card</strong> is something else: ESPFuji does not support that (see the
-      <a href="#extboot">note at the top of this page</a>). Start the Lisa from its internal disk.</li>
+      ESProFile on a parallel card</strong> was a fault of ESPFuji 1.1.4 and 1.1.2 and is fixed in 1.1.5 (see the
+      <a href="#extboot">note at the top of this page</a>).</li>
     <li><strong>Want a backup of the old firmware first?</strong> This page cannot make one. The command-line script
       can: <code>flash_espfuji_release.py backup</code>, and its <code>restore</code> puts the saved firmware back at
       any time.</li>
     <li><strong>The installer says there is no firmware for this chip:</strong> this page installs on the plain
-      ESP32 that the ESProFile boards carry. The fixes in 1.1.3 and 1.1.4 are for that chip. An ESP32-S3 build is on
-      the release page for testers only: it has never run on hardware and does not have the main fix yet.</li>
+      ESP32 that the ESProFile boards carry. The fixes in 1.1.3, 1.1.4 and 1.1.5 were tested on that chip. An
+      ESP32-S3 build is on the release page for testers only: it has never run on hardware and does not have the
+      main fix of 1.1.3 yet.</li>
   </ul>
 
   <h2>Going back to Alex's stock firmware</h2>
@@ -225,6 +239,11 @@
     </esp-web-install-button>
     <p>Puts the ESProFile back to the firmware it came with (emulator 1.6), for the ESP32 on the ESProFile boards.
       Takes about one to two minutes. Your disk image on the SD card is not touched.</p>
+    <p class="small"><strong>If you start your Lisa from an external ESProFile on a parallel card:</strong> the
+      stock build offered here cannot do that. It is the stock 1.6 source built here with a current Arduino core,
+      it answers the card as late as ESPFuji 1.1.4 did, and it gave error 85 on a Lisa 2/10 with Apple's 2-port
+      card. This is a matter of how this copy was built, not of the stock firmware as delivered: a factory-original
+      build tried on the same board started the Lisa. ESPFuji 1.1.5 does not have this limit.</p>
   </div>
 
   <footer class="small">
@@ -234,8 +253,8 @@
       The ESProFile boards and the stock firmware are
       <a href="https://github.com/alexthecat123/ESProFile">Alex's</a>.</p>
     <p>Release notes, the command-line script and checksums:
-      <a href="https://github.com/GyroPilot/ESPFuji/releases/tag/v1.1.4">ESPFuji 1.1.4 on GitHub</a>. Image checksum
-      (SHA-256): <code>0184c79635fef81d2005c94b248a683037c82de8965c0e46ae9c813c7b47c194</code>.</p>
+      <a href="https://github.com/GyroPilot/ESPFuji/releases/tag/v1.1.5">ESPFuji 1.1.5 on GitHub</a>. Image checksum
+      (SHA-256): <code>c9def756fbf10139871a393dccc2b47cfd9d962228e691a0c84ef59048c8c4c5</code>.</p>
     <p>The stock firmware offered here was built, unchanged, from Alex's source (commit <code>708cfc1</code> of
       11 November 2026: emulator 1.6, diagnostic 1.2) for the ESP32. It is provided by this page, not by Alex. Image
       checksum (SHA-256): <code>feac19a52ca97c5654835ccad5ac76c9245ca8bd78c5c98bf3177cac689a1d77</code>.
