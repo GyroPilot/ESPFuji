@@ -11293,6 +11293,7 @@ void initPinsDiag(){
   pinMode(PARITY_Pin, INPUT);
   pinMode(red_led, OUTPUT);
   pinMode(green_led, OUTPUT);
+  ledRouteInit(); // ESPFuji 1.1.5: pinMode took the LEDs' PWM away; set it up again
 
   clearCMD();
   clearRW();

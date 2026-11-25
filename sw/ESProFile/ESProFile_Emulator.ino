@@ -1212,6 +1212,7 @@ void initPinsEmulator(){
   pinMode(PARITY_Pin, OUTPUT);
   pinMode(red_led, OUTPUT);
   pinMode(green_led, OUTPUT);
+  ledRouteInit(); // ESPFuji 1.1.5: pinMode took the LEDs' PWM away; set it up again
   // Set both BSY and PARITY to their default states (high)
   clearBSY();
   clearPARITY();

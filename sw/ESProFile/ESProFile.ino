@@ -32,12 +32,25 @@
 // But include this one instead if you're using the ESProFile that's built into the LisaFPGA board
 //#include "PinDefs_LisaFPGA.h"
 
+// ESPFuji 1.1.5: the LEDs are switched with register writes only (see ledRouteInit and setLEDColor below).
+// An analogWrite call can wait a whole PWM period (1 ms) in the current Arduino core, and setBSY/clearBSY switch
+// the LED before they move BSY: every answer to the host came 1 to 2 ms late.
+#include "soc/gpio_reg.h"
+#include "soc/gpio_sig_map.h"
+#define LED_SEL_OFF (SIG_GPIO_OUT_IDX | GPIO_FUNC0_OEN_SEL) // the pin follows its plain GPIO latch, which is held at the LED-off level
+#define RED_SEL_REG (GPIO_FUNC0_OUT_SEL_CFG_REG + 4 * red_led)
+#define GREEN_SEL_REG (GPIO_FUNC0_OUT_SEL_CFG_REG + 4 * green_led)
+uint32_t ledSelRedOn = LED_SEL_OFF; // the output-select value that puts the red LED's PWM on its pin (set by ledRouteInit)
+uint32_t ledSelGreenOn = LED_SEL_OFF; // the same for the green LED
+
+
 // The entire purpose of this file is to pick whether we want to run ESProFile_Diagnostic.ino or ESProFile_Emulator.ino
 void setup(){
   pinMode(switch_pin, INPUT); // Set the switch pin to an input
   bool switchState = digitalRead(switch_pin); // Read its state
   pinMode(red_led, OUTPUT); // Set the red LED to an output
   pinMode(green_led, OUTPUT); // And the green LED too
+  ledRouteInit(); // ESPFuji 1.1.5: set the LEDs' PWM up once; from here on they are switched with register writes
   Serial.begin(115200); // Start serial comms
   // Make sure that serial doesn't block if nothing is reading from the other end
   // Only run this line if we're running on an S3; the stock ESP32 doesn't have built in USB and so the compiler will give an error on this line
@@ -87,22 +100,31 @@ void clearScreen(){
   Serial.print("[H");
 }
 
+// ESPFuji 1.1.5: sets up the PWM of both LEDs once, at their fixed duty cycles, and remembers how each pin is
+// routed to its PWM signal.  Must be called again after every pinMode() of the LED pins (pinMode takes the PWM
+// away from the pin).  This is the only place where analogWrite is called.
+void ledRouteInit(){
+  analogWrite(red_led, red_pwm_duty); // Let the Arduino core set the PWM up and route it to the pin
+  uint32_t sel = REG_READ(RED_SEL_REG);
+  if((sel & GPIO_FUNC0_OUT_SEL_V) != SIG_GPIO_OUT_IDX) ledSelRedOn = sel; // Remember that routing (unless the core left the pin alone)
+  REG_WRITE(RED_W1TC_REG, 0b1 << red); // The pin's own latch is the LED-off level (the LEDs are on when the pin is high)
+  REG_WRITE(RED_ENABLE_W1TS_REG, 0b1 << red); // And the pin stays an output
+  REG_WRITE(RED_SEL_REG, LED_SEL_OFF); // Red off until setLEDColor says otherwise
+  analogWrite(green_led, green_pwm_duty); // The same for the green LED
+  sel = REG_READ(GREEN_SEL_REG);
+  if((sel & GPIO_FUNC0_OUT_SEL_V) != SIG_GPIO_OUT_IDX) ledSelGreenOn = sel;
+  REG_WRITE(GREEN_W1TC_REG, 0b1 << green);
+  REG_WRITE(GREEN_ENABLE_W1TS_REG, 0b1 << green);
+  REG_WRITE(GREEN_SEL_REG, LED_SEL_OFF);
+  delay(3); // More than one PWM period, so both duty cycles are in effect before the LEDs are used
+}
+
 // Sets the red and green sub-LEDs to the specified values
+// ESPFuji 1.1.5: two register writes, no library call.  A LED is on when its pin carries its PWM signal and off
+// when the pin follows its plain GPIO latch.  (Green uses PWM since the LED is painfully bright otherwise.)
 inline __attribute__((__always_inline__)) void setLEDColor(bool r, bool g){
-  // Set red if r is 1, clear it if r is 0
-  if(r == 1){
-    analogWrite(red_led, red_pwm_duty); // If r is 1, set the duty cycle to the desired value to turn the red LED on
-  }
-  else if(r == 0){
-    analogWrite(red_led, 0); // Else, set the duty cycle to 0% to turn the red LED off
-  }
-  // For green, we have to use PWM since the LED is painfully bright otherwise
-  if(g == 1){
-    analogWrite(green_led, green_pwm_duty); // If g is 1, set the duty cycle to the desired value to turn the green LED on
-  }
-  else if (g == 0){
-    analogWrite(green_led, 0); // Else, set the duty cycle to 0% to turn the green LED off
-  }
+  REG_WRITE(RED_SEL_REG, r ? ledSelRedOn : LED_SEL_OFF);
+  REG_WRITE(GREEN_SEL_REG, g ? ledSelGreenOn : LED_SEL_OFF);
 }
 
 // Sets the direction of the parallel bus

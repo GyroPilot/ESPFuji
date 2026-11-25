@@ -2,6 +2,39 @@
 
 Firmware versions are what HELLO prints ("ESPFuji 0.5.3"). The Lisa-side test tool has its own numbers (ESPFuji 0.2 REV C).
 
+## 1.1.5 (24 November 2026): a Lisa starts from an external ESProFile on a parallel card again
+- **Error 85 when a Lisa is started from an external ESProFile on a parallel card is fixed.** The "not supported" note
+  of 1.1.4 is withdrawn.
+- **What was wrong.** To start from a parallel card the Lisa uses the boot ROM on that card. The ROM of Apple's 2-port
+  card (341-0193-A) lowers CMD and waits only about 0.9 milliseconds for the drive to answer with BSY; then it gives
+  up with error 85. ESPFuji 1.1.2 and 1.1.4 answered after about 2 milliseconds (older versions were not measured).
+  The Lisa's own boot ROM and the Office System wait far longer, which is why an internal ESProFile, and an external
+  one used as a second disk, worked all along.
+- **Where the 2 milliseconds came from.** The emulator switches its LED before every change of BSY, with analogWrite.
+  In the Arduino ESP32 core these builds are made with (3.3.12) that call can wait for a whole period of the LED's 1
+  kHz PWM. The delay was not in the disk code and not in the network code.
+- **The fix.** The LED's PWM is set up once at start; from then on the LED is switched by writing the output-select
+  register of its pin. No library call is left in front of a change of BSY. Nothing in the transfer loops, the mailbox
+  or the guards of 1.1.3 and 1.1.4 is touched.
+- **Disk transfers are faster** for the same reason: on the bench, in the same three minutes about 2.3 times the reads
+  and 3.2 times the writes of 1.1.4 (36,005 against 15,865 reads; 35,553 against 11,223 writes). How much a Lisa gains
+  was not measured.
+- **Tested:** Lisa 2/10, Apple 2-port parallel card, an external ESProFile (ESP32 of chip revision 3.1) on its cable,
+  the same board, cable and SD card in one sitting: 1.1.4 gave error 85 twice; the 1.1.5 code started the Office
+  System 3.1 four times out of four (three with the external ESProFile alone, and once, with the released image, with
+  an internal ESProFile mounted beside it). Started from the internal disk, the external ESProFile with 1.1.5 mounted
+  as a second disk and a tool was copied onto it. Two controls on the same board: the stock firmware offered on the
+  installer page (the stock 1.6 source built here with the same Arduino core) gave error 85 as well, and a
+  factory-original build of the stock emulator (1.2) started the Lisa. The LEDs look as before. Bench (one ESProFile
+  reading and writing another), with the same code under its test name 1.1.5a1: the answer to the host (BSY low after
+  CMD low) takes 1.5 microseconds where 1.1.4 took about 2 milliseconds; in 145,000 handshakes with the radio busy
+  none took longer than 14 microseconds. The released image itself on the bench: 36,006 reads and 35,582 writes in
+  three minutes each and 18,008 reads through a restart, all with the radio busy, nothing odd or refused; its answer
+  to the host takes 1.5 microseconds, and in 145,000 handshakes none took longer than 14 microseconds.
+- **For the plain ESP32 only**, like 1.1.3 and 1.1.4. The ESP32-S3 build has the same LED change, but still NOT the
+  parked core, and it has never run on hardware.
+- Nothing changed for the Lisa or Mac programs: same mailbox, same requests, same answers. espfuji.ini is unchanged.
+
 ## 1.1.4 (24 November 2026): a guard for poor cables and faulty boards
 - **The known issue of 1.1.3 is closed.** On a poor cable or a faulty board a control line can show one low sample
   when many data lines switch together. 1.1.3 left its protected loop on that sample, and a block could then be read
@@ -17,7 +50,8 @@ Firmware versions are what HELLO prints ("ESPFuji 0.5.3"). The Lisa-side test to
   reads and 2,767 writes. An external ESProFile (an ESP32 of chip revision 1.0) on its cable on a Lisa 2/10's 2-port
   parallel card, as a second disk: a tool copied onto it and compared byte for byte, 730 transfers. Nothing odd and
   nothing refused in any of them.
-- **Not supported: starting (booting) a Lisa from an external ESProFile attached to a parallel card.** The Lisa
+- **(Fixed in 1.1.5.)** Not supported in 1.1.4: starting (booting) a Lisa from an external ESProFile attached to a
+  parallel card. The Lisa
   shows error 85. Seen on a Lisa 2/10 with the 2-port card, with 1.1.2 as well as 1.1.4. Once the Lisa has started
   from its internal disk, the same ESProFile on the same card and cable works normally as a second disk. This is
   being looked into.

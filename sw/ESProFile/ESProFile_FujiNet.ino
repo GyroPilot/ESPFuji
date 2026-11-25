@@ -48,7 +48,7 @@
 #endif
 // WiFi.h, WiFiClientSecure.h and HTTPClient.h are included at the top of ESProFile.ino (before the emulator defines).
 
-#define ESPFUJI_VERSION "ESPFuji 1.1.4"
+#define ESPFUJI_VERSION "ESPFuji 1.1.5"
 #define MB_NET_CORE   0                                // Wi-Fi's core; the interface owns core 1 with interrupts off
 #define MB_BODY_MAX   32768                            // the largest page body kept (a Lisa picture is 13 KB)
 #define MB_JOIN_MS    8000                             // how long mbSetup waits for the first Wi-Fi join
